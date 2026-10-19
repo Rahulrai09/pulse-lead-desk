@@ -972,9 +972,27 @@
           notify("Customer logged in", `${c ? (c.name || c.email || c.phone) : "A new customer"} just logged in on the store (${p.new.device || "web"})`);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        // The connection drops when the laptop sleeps or Wi-Fi changes: reconnect and reload the data.
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") { clearTimeout(startLive._t); startLive._t = setTimeout(() => { if (S.me) { startLive(); loadAll(); } }, 5000); }
+      });
     poll = setInterval(() => { if (!document.hidden) { syncStatus(); render(); } }, 60_000);
     clearInterval(remindTimer); remindTimer = setInterval(() => checkReminders(false), 30_000); setTimeout(() => checkReminders(true), 4000);
   }
+  // When the tab comes back after being hidden (laptop asleep, other tab), refresh the data and the live connection.
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { hiddenAt = now(); return; }
+    if (S.me && S.loaded && now() - hiddenAt > 60e3) { startLive(); loadAll(); }
+  });
+  // If a newer version of Lead Desk has been published, reload to pick it up (never while a form is being typed in).
+  const MY_VERSION = (document.querySelector('script[src*="app.js?v="]')?.getAttribute("src") || "").split("v=")[1] || "";
+  setInterval(async () => {
+    try {
+      const html = await (await fetch(location.pathname + "?check=" + now(), { cache: "no-store" })).text();
+      const v = (html.match(/app\.js\?v=(\d+)/) || [])[1];
+      if (v && MY_VERSION && v !== MY_VERSION && !$("modalRoot").innerHTML && !S.open && !document.querySelector("input:focus,textarea:focus")) location.reload();
+    } catch {}
+  }, 5 * 60e3);
   function stopLive() { if (channel) sb.removeChannel(channel); channel = null; clearInterval(poll); clearInterval(remindTimer); }
 })();
