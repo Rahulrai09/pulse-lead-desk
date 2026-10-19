@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Pulse Lead Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0}</style>
+</head>
+<body>
+
+<!-- Sign in -->
+<section class="auth wrap" id="authView" hidden>
+  <form class="auth-card" id="loginForm">
+    <div class="brand"><b>PULSE</b><span>Lead Desk</span></div>
+    <h1>Sign in</h1>
+    <p>For the Pulse team only. Ask your admin for access.</p>
+    <div class="field"><label for="lEmail">Email</label><input class="inp" id="lEmail" type="email" autocomplete="username" required></div>
+    <div class="field"><label for="lPass">Password</label><input class="inp" id="lPass" type="password" autocomplete="current-password" required></div>
+    <div class="err" id="lErr" role="alert"></div>
+    <button class="btn primary" type="submit" id="lBtn">Sign in</button>
+  </form>
+</section>
+
+<!-- Choose a new password (first sign-in) -->
+<section class="auth wrap" id="pwView" hidden>
+  <form class="auth-card" id="pwForm">
+    <div class="brand"><b>PULSE</b><span>Lead Desk</span></div>
+    <h1>Choose your password</h1>
+    <p>You signed in with a temporary password. Pick your own to continue.</p>
+    <div class="field"><label for="pw1">New password (at least 10 characters)</label><input class="inp" id="pw1" type="password" minlength="10" autocomplete="new-password" required></div>
+    <div class="field"><label for="pw2">Repeat new password</label><input class="inp" id="pw2" type="password" minlength="10" autocomplete="new-password" required></div>
+    <div class="err" id="pwErr" role="alert"></div>
+    <button class="btn primary" type="submit">Save password</button>
+  </form>
+</section>
+
+<!-- No access -->
+<section class="auth wrap" id="denyView" hidden>
+  <div class="auth-card">
+    <div class="brand"><b>PULSE</b><span>Lead Desk</span></div>
+    <h1>No access yet</h1>
+    <p id="denyText">This account isn't on the Pulse team. Ask your admin to add you.</p>
+    <button class="btn" type="button" data-logout>Sign out</button>
+  </div>
+</section>
+
+<!-- App -->
+<div id="appView" hidden>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><b>PULSE</b><span>Lead Desk</span></div>
+    <div class="sync"><span class="dot" id="syncDot"></span><span id="syncText">Loading…</span></div>
+    <button class="btn" id="refreshBtn" type="button">Refresh</button>
+    <div class="me"><b id="meName"></b><span class="role" id="meRole"></span><button class="btn small" type="button" data-logout>Sign out</button></div>
+  </div>
+  <div class="wrap"><nav class="tabs" role="tablist" id="tabs">
+    <button class="tab" role="tab" data-v="overview" aria-selected="true">Overview</button>
+    <button class="tab" role="tab" data-v="contacts">Contacts<span class="ct num" id="ctContacts">0</span></button>
+    <button class="tab" role="tab" data-v="pipeline">Pipeline</button>
+    <button class="tab" role="tab" data-v="checkouts">Checkouts<span class="ct num" id="ctCheckouts">0</span></button>
+    <button class="tab" role="tab" data-v="orders">Orders<span class="ct num" id="ctOrders">0</span></button>
+    <button class="tab" role="tab" data-v="schedule">Schedule<span class="ct num" id="ctSchedule">0</span></button>
+    <button class="tab" role="tab" data-v="team" id="teamTab" hidden>Team</button>
+  </nav></div>
+</header>
+
+<main class="wrap" id="main">
+  <div id="banner"></div>
+
+  <section data-view="overview">
+    <div class="kpis" id="kpis"></div>
+    <div class="two" style="margin-top:18px">
+      <div class="panel">
+        <div class="panel-h"><h2>Hot leads</h2><p>Checkouts not converted in the last 14 days. Call these first.</p></div>
+        <div class="list" id="hotList"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h2>Conversion funnel</h2><p>All time</p></div>
+        <div class="funnel" id="funnel"></div>
+        <div class="panel-h" style="margin:20px 0 8px"><h2>Due follow-ups</h2></div>
+        <div class="list" id="dueList"></div>
+      </div>
+    </div>
+    <div class="two" style="margin-top:18px">
+      <div class="panel">
+        <div class="panel-h"><h2>Fresh sign-ups</h2><p>New customer accounts in the last 7 days</p></div>
+        <div class="list" id="freshList"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h2>Recent logins</h2><p>Customers who logged in on the store</p></div>
+        <div class="list" id="loginList"></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="contacts" hidden>
+    <div class="panel">
+      <div class="filters" id="cFilters">
+        <input class="search" id="cSearch" type="search" placeholder="Search name, phone, email, city" aria-label="Search contacts">
+      </div>
+      <div class="tablebox"><table>
+        <thead><tr><th>Contact</th><th>Status</th><th>Stage</th><th>Signed up</th><th>Last login</th><th>Last checkout</th><th>Value</th><th>Owner</th><th>Next follow-up</th></tr></thead>
+        <tbody id="cBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section data-view="pipeline" hidden>
+    <div class="panel">
+      <div class="panel-h"><h2>Sales pipeline</h2><p>Set each contact's stage from their profile. Click a card to open it.</p></div>
+      <div class="board" id="board"></div>
+    </div>
+  </section>
+
+  <section data-view="checkouts" hidden>
+    <div class="panel">
+      <div class="panel-h"><h2>Checkouts</h2><p>Every checkout started on the store, newest first</p></div>
+      <div class="filters" id="kFilters"></div>
+      <div class="tablebox"><table>
+        <thead><tr><th>Started</th><th>Customer</th><th>Wheelchair</th><th>Value</th><th>Result</th><th></th></tr></thead>
+        <tbody id="kBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section data-view="orders" hidden>
+    <div class="panel">
+      <div class="panel-h"><h2>Orders</h2><p>Paid, pending and cancelled orders</p></div>
+      <div class="tablebox"><table>
+        <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Items</th><th>Value</th><th>Payment</th><th>Delivery</th></tr></thead>
+        <tbody id="oBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section data-view="schedule" hidden>
+    <div class="two">
+      <div class="panel">
+        <div class="panel-h"><h2>Follow-up schedule</h2><p>Calls, demos and visits your team has planned</p></div>
+        <div class="filters" id="sFilters"></div>
+        <div class="list" id="sList"></div>
+      </div>
+      <div class="panel" id="sFormPanel">
+        <div class="panel-h"><h2>Plan a follow-up</h2></div>
+        <form class="frm" id="sForm">
+          <div class="field"><label for="sWho">Contact</label><select class="inp" id="sWho" required></select></div>
+          <div class="row2">
+            <div class="field"><label for="sDate">Date</label><input class="inp" type="date" id="sDate" required></div>
+            <div class="field"><label for="sTime">Time</label><input class="inp" type="time" id="sTime" value="11:00"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="sType">Type</label><select class="inp" id="sType"><option>Call</option><option>WhatsApp</option><option>Demo</option><option>Home visit</option><option>Email</option></select></div>
+            <div class="field"><label for="sAssignee">Assign to</label><select class="inp" id="sAssignee"></select></div>
+          </div>
+          <div class="field"><label for="sNote">Note</label><textarea class="inp" id="sNote" placeholder="e.g. Share EMI options for Premium Comfort"></textarea></div>
+          <button class="btn primary" type="submit">Add to schedule</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="team" hidden>
+    <div class="two">
+      <div class="panel">
+        <div class="panel-h"><h2>Team</h2><p>People who can sign in to Lead Desk</p></div>
+        <div class="tablebox"><table style="min-width:560px">
+          <thead><tr><th>Person</th><th>Role</th><th>Status</th><th></th></tr></thead>
+          <tbody id="tBody"></tbody>
+        </table></div>
+        <p class="syncnote" style="margin:10px 2px 0"><b>Admin</b> manages the team and everything else. <b>Sales</b> works contacts, notes and follow-ups. <b>Viewer</b> can only look.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h2>Add a person</h2><p>They get a temporary password to change on first sign-in.</p></div>
+        <form class="frm" id="tForm">
+          <div class="field"><label for="tName">Name</label><input class="inp" id="tName" autocomplete="off"></div>
+          <div class="field"><label for="tEmail">Email</label><input class="inp" id="tEmail" type="email" required autocomplete="off"></div>
+          <div class="field"><label for="tRole">Role</label><select class="inp" id="tRole"><option value="sales">Sales</option><option value="viewer">Viewer</option><option value="admin">Admin</option></select></div>
+          <button class="btn primary" type="submit">Add to team</button>
+        </form>
+        <div class="panel-h" style="margin:22px 0 8px"><h2>Sync history</h2></div>
+        <div class="list" id="syncList"></div>
+      </div>
+    </div>
+  </section>
+</main>
+</div>
+
+<div id="drawerRoot"></div>
+<div id="modalRoot"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
