@@ -215,7 +215,7 @@
       else { p.status = "signup"; p.statusText = "Signed up"; }
       p.fresh = p.source === "customer" && now() - t(p.createdAt) < 7 * DAY;
       p.cart = (lastAbandoned || p.checkouts[0])?.items || "";
-      p.recover = lastAbandoned?.recover_url || "";
+      p.recover = (p.checkouts.find((k) => !k.completed_at && k.recover_url) || {}).recover_url || "";
       p.crm = crm[p.key] || null;
       p.stage = p.crm?.stage || (p.status === "converted" ? "won" : "new");
       p.owner = p.crm?.owner_email || "";
