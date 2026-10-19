@@ -17,3 +17,8 @@ analytics.subscribe("checkout_started", (e) => {
       tot: k.totalPrice && k.totalPrice.amount, cur: k.currencyCode, em: k.email, ph: k.phone || a.phone,
       nm: [a.firstName, a.lastName].filter(Boolean).join(" ") } });
 });
+
+analytics.subscribe("page_viewed", (e) => {
+  const d = e.context.document;
+  send({ k: "visit", c: cust(), v: e.clientId, p: d.location.pathname, d: dev(e), m: { t: d.title } });
+});

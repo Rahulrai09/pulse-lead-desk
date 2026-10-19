@@ -112,7 +112,10 @@
         fetchAll("sh_customers", "id,name,email,phone,city,created_at,updated_at,orders_count,amount_spent,tags,state", "updated_at"),
         fetchAll("sh_checkouts", "id,customer_id,name,email,phone,city,created_at,updated_at,completed_at,total,items,recover_url", "created_at"),
         fetchAll("sh_orders", "id,name,customer_id,customer_name,email,phone,created_at,cancelled_at,financial,fulfillment,total,items", "created_at"),
-        sb.from("store_events").select("id,customer_id,visitor,kind,created_at,device,path,meta").gte("created_at", since).order("created_at", { ascending: false }).limit(5000).then((r) => (r.data || []).filter((e) => e.visitor !== "testvisitor123")),
+        Promise.all([
+          sb.from("store_events").select("id,customer_id,visitor,kind,created_at,device,path,meta").neq("kind", "visit").gte("created_at", since).order("created_at", { ascending: false }).limit(5000),
+          sb.from("store_events").select("id,customer_id,visitor,kind,created_at,device,path,meta").eq("kind", "visit").gte("created_at", new Date(now() - 14 * DAY).toISOString()).order("created_at", { ascending: false }).limit(5000),
+        ]).then(([a, b]) => [...(a.data || []), ...(b.data || [])].filter((e) => e.visitor !== "testvisitor123").sort((x, y) => t(y.created_at) - t(x.created_at))),
         fetchAll("crm_contacts", "*"),
         fetchAll("crm_notes", "*", "created_at"),
         fetchAll("crm_followups", "*"),
@@ -322,6 +325,7 @@
   function li(p, sub) { return `<div class="li"><div class="who" data-open="${p.key}" style="cursor:pointer"><b>${esc(p.name)} ${chip(p)}</b><small>${sub}</small></div>${actions(p)}</div>`; }
   function renderOverview() {
     renderKpis();
+    renderBrowsing();
     renderCarts();
     const hot = S.contacts.filter((p) => (p.status === "notconverted" || p.status === "checkout") && now() - t(p.lastCheckout) < 14 * DAY);
     $("hotList").innerHTML = hot.length ? hot.slice(0, 10).map((p) => li(p, `${esc(p.cart || "Checkout")} · ${inr(p.value)} · ${ago(p.lastCheckout)}${p.owner ? " · " + esc(memberName(p.owner)) : ""}`)).join("") : `<div class="empty">No unconverted checkouts in the last 14 days.</div>`;
@@ -368,6 +372,41 @@
       }
     }
     return all.filter((e) => !hide.has(e.id));
+  }
+  function pageName(path, meta) {
+    path = String(path || "/").split("?")[0];
+    const pt = meta && meta.t ? String(meta.t).split(/\s[–|-]\s/)[0].trim() : "";
+    if (pt && /\/(products|collections|pages)\//.test(path)) return (path.includes("/products/") ? "product · " : path.includes("/collections/") ? "category · " : "page · ") + pt;
+    const title = (x) => decodeURIComponent(x).replace(/[-_]+/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+    let m;
+    if (path === "/" || path === "") return "Home page";
+    if ((m = path.match(/\/products\/([^/]+)/))) return "product · " + title(m[1]);
+    if ((m = path.match(/\/collections\/([^/]+)/))) return "category · " + title(m[1]);
+    if ((m = path.match(/\/pages\/([^/]+)/))) return "page · " + title(m[1]);
+    if (path.startsWith("/cart")) return "Cart";
+    if (path.startsWith("/checkouts")) return "Payment page";
+    if (path.startsWith("/account")) return "My account";
+    if (path.startsWith("/search")) return "Search";
+    return title(path.replace(/^\//, ""));
+  }
+  function renderBrowsing() {
+    const since = now() - 30 * 60e3, byP = new Map();
+    for (const e of S.raw.events) {
+      if (t(e.created_at) < since) continue; const c = evPerson(e);
+      const cur = byP.get(c) || { c, last: e, pages: new Set(), n: 0 };
+      if (t(e.created_at) > t(cur.last.created_at)) cur.last = e;
+      if (e.path) cur.pages.add(e.path); cur.n++; byP.set(c, cur);
+    }
+    const rows = [...byP.values()].sort((a, b) => (a.c.startsWith("v:") - b.c.startsWith("v:")) || t(b.last.created_at) - t(a.last.created_at));
+    const named = rows.filter((r) => !r.c.startsWith("v:")).length;
+    $("browseCount").textContent = rows.length ? `${rows.length} on the store in the last 30 min · ${named} logged in · ${rows.length - named} guests` : "People on the store in the last 30 min";
+    $("browseList").innerHTML = rows.length ? rows.map((r) => {
+      const p = r.c.startsWith("v:") ? null : byKey("c" + r.c);
+      const what = r.last.kind === "cart" ? "Added to cart · " + esc(r.last.meta?.t || "") : r.last.kind === "checkout" ? "On the payment page" : r.last.kind === "login" ? "Just logged in" : "Viewing " + esc(pageName(r.last.path, r.last.meta));
+      const sub = `<span style="color:var(--good)">● </span>${what} · ${ago(r.last.created_at)} · ${r.pages.size} page${r.pages.size === 1 ? "" : "s"} · ${esc(r.last.device || "")}`;
+      if (p) return li(p, sub);
+      return `<div class="li"><div class="who"><b>Guest ${esc(r.c.slice(-4).toUpperCase())} <span class="chip c-signup">Guest · not logged in</span></b><small>${sub}</small></div></div>`;
+    }).join("") : `<div class="empty">Nobody is on the store right now. Click any contact to see every page they've viewed.</div>`;
   }
   function renderCarts() {
     const evs = cartFeed();
@@ -494,6 +533,8 @@
     const ev = [];
     if (p.source === "customer") ev.push({ at: p.createdAt, cls: "", title: "Created account", sub: (p.tags || []).filter((x) => /login|shop/i.test(x)).join(", ") });
     for (const l of p.logins.slice(0, 15)) ev.push({ at: l.created_at, cls: "e-login", title: "Logged in on the store", sub: l.device || "" });
+    for (const v of p.visits.slice(0, 40)) ev.push({ at: v.created_at, cls: "", title: "Viewed " + pageName(v.path, v.meta), sub: (!v.customer_id ? "before login · " : "") + (v.device || "") });
+    for (const c of (p.carts || []).slice(0, 30)) ev.push({ at: c.created_at, cls: "e-ab", title: c.kind === "cart" ? `Added to cart · ${c.meta?.t || "a product"}${c.meta?.a ? " · " + inr(c.meta.a * (c.meta.q || 1)) : ""}` : `Reached payment page · ${c.meta?.t || ""}${c.meta?.tot ? " · " + inr(c.meta.tot) : ""}`, sub: (!c.customer_id ? "before login · " : "") + (c.device || "") });
     for (const k of p.checkouts) ev.push({ at: k.created_at, cls: k.completed_at ? "e-order" : "e-ab", title: (k.completed_at ? "Checkout completed" : "Checkout not completed") + " · " + inr(k.total), sub: k.items });
     for (const o of p.orders) ev.push({ at: o.created_at, cls: "e-order", title: `Order ${o.name} · ${inr(o.total)}`, sub: `${(PAY[o.financial] || [0, o.financial])[1]}${o.cancelled_at ? " · Cancelled" : ""}` });
     for (const n of p.notes) ev.push({ at: n.created_at, cls: "e-note", title: "Note by " + memberName(n.author_email), text: n.body });
