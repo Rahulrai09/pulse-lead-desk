@@ -13,7 +13,7 @@
   const S = {
     me: null, role: null, view: "overview", cFilter: "all", kFilter: "all", sFilter: "upcoming", search: "", open: null,
     raw: { customers: [], checkouts: [], orders: [], events: [], contacts: [], notes: [], followups: [], team: [], sync: [] },
-    contacts: [], loaded: false,
+    contacts: [], ck: [], v2c: {}, loaded: false, period: { p: "all", from: "", to: "" },
   };
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -112,7 +112,7 @@
         fetchAll("sh_customers", "id,name,email,phone,city,created_at,updated_at,orders_count,amount_spent,tags,state", "updated_at"),
         fetchAll("sh_checkouts", "id,customer_id,name,email,phone,city,created_at,updated_at,completed_at,total,items,recover_url", "created_at"),
         fetchAll("sh_orders", "id,name,customer_id,customer_name,email,phone,created_at,cancelled_at,financial,fulfillment,total,items", "created_at"),
-        sb.from("store_events").select("customer_id,visitor,kind,created_at,device,path,meta").gte("created_at", since).order("created_at", { ascending: false }).limit(5000).then((r) => r.data || []),
+        sb.from("store_events").select("id,customer_id,visitor,kind,created_at,device,path,meta").gte("created_at", since).order("created_at", { ascending: false }).limit(5000).then((r) => (r.data || []).filter((e) => e.visitor !== "testvisitor123")),
         fetchAll("crm_contacts", "*"),
         fetchAll("crm_notes", "*", "created_at"),
         fetchAll("crm_followups", "*"),
@@ -148,11 +148,33 @@
     S.contacts = build(); render();
   }
 
+  /* Who is behind an event: the customer id, or the customer that browser later logged in as. */
+  const evCust = (ev) => ev.customer_id || S.v2c[ev.visitor] || null;
+  const evPerson = (ev) => evCust(ev) || "v:" + ev.visitor;
+  /* Checkouts seen live by the store pixel that Shopify hasn't listed yet (Shopify only lists a checkout once it's abandoned). */
+  function liveCheckouts() {
+    const R = S.raw, out = [];
+    for (const ev of R.events) {
+      if (ev.kind !== "checkout") continue;
+      const c = evCust(ev), m = ev.meta || {}, at = t(ev.created_at);
+      const ph = digits(m.ph).slice(-10), em = (m.em || "").toLowerCase();
+      const same = (k) => (c && k.customer_id === c) || (em && (k.email || "").toLowerCase() === em) || (ph && digits(k.phone).slice(-10) === ph);
+      if (R.checkouts.some((k) => same(k) && Math.abs(t(k.created_at) - at) < 3 * 3600e3)) continue;
+      if (out.some((k) => k.person === evPerson(ev) && k.items === (m.t || "") && Math.abs(t(k.created_at) - at) < 30 * 60e3)) continue;
+      const order = R.orders.find((o) => (same(o) || (c && o.customer_id === c)) && t(o.created_at) >= at - 60e3);
+      out.push({ id: "live-" + ev.id, live: true, person: evPerson(ev), customer_id: c, name: m.nm || "", email: m.em || "", phone: m.ph || "", city: "",
+        created_at: ev.created_at, updated_at: ev.created_at, completed_at: order ? order.created_at : null, total: m.tot || 0, items: m.t || "", recover_url: "" });
+    }
+    return out;
+  }
   function build() {
     const R = S.raw, byKey = new Map();
+    S.v2c = {};
+    for (const ev of R.events.slice().reverse()) if (ev.customer_id && ev.visitor) S.v2c[ev.visitor] = ev.customer_id;
+    S.ck = [...liveCheckouts(), ...R.checkouts].sort((a, b) => t(b.created_at) - t(a.created_at));
     const get = (key, seed) => { if (!byKey.has(key)) byKey.set(key, Object.assign({ key, checkouts: [], orders: [], logins: [], visits: [], tags: [] }, seed)); return byKey.get(key); };
     for (const c of R.customers) get("c" + c.id, { cid: c.id, source: "customer", name: c.name || "Unnamed customer", email: c.email || "", phone: c.phone || "", city: c.city || "", createdAt: c.created_at, updatedAt: c.updated_at, spent: Number(c.amount_spent || 0), orderCount: c.orders_count || 0, tags: c.tags || [] });
-    for (const k of R.checkouts) {
+    for (const k of S.ck) {
       const p = get(k.customer_id ? "c" + k.customer_id : "g" + k.id, { source: "guest", name: k.name || "Guest checkout", email: k.email || "", phone: "", city: "", createdAt: k.created_at, updatedAt: k.updated_at, spent: 0, orderCount: 0 });
       if (!p.phone) p.phone = k.phone || ""; if (!p.city) p.city = k.city || ""; if (!p.email) p.email = k.email || "";
       p.checkouts.push(k);
@@ -162,7 +184,7 @@
       p.orders.push(o);
     }
     for (const ev of R.events) {
-      const p = ev.customer_id ? byKey.get("c" + ev.customer_id) : null; if (!p) continue;
+      const c = evCust(ev), p = c ? byKey.get("c" + c) : null; if (!p) continue;
       if (ev.kind === "login") p.logins.push(ev); else if (ev.kind === "visit") p.visits.push(ev); else (p.carts ||= []).push(ev);
     }
     const crm = Object.fromEntries(R.contacts.map((c) => [c.key, c]));
@@ -229,9 +251,51 @@
     else { setSync("err", lastOk ? "Last good sync " + ago(lastOk.finished_at) : "Sync failed"); banner("bad", `<p>The last Shopify sync failed: ${esc(last.message || "unknown error")}</p>${isAdmin() ? '<button class="btn primary" type="button" id="bannerRetry">Try again</button>' : ""}`); }
   }
 
+  /* ---------- Date / year / time filter ---------- */
+  const PRESETS = [["all", "All time"], ["today", "Today"], ["yesterday", "Yesterday"], ["7d", "Last 7 days"], ["30d", "Last 30 days"], ["month", "This month"], ["lastmonth", "Last month"], ["year", "This year"], ["custom", "Custom date & time"]];
+  function periodBounds() {
+    const P = S.period, d0 = new Date(); d0.setHours(0, 0, 0, 0); const sod = d0.getTime();
+    if (/^y\d{4}$/.test(P.p)) { const y = +P.p.slice(1); return [new Date(y, 0, 1).getTime(), new Date(y + 1, 0, 1).getTime() - 1]; }
+    switch (P.p) {
+      case "today": return [sod, Infinity];
+      case "yesterday": return [sod - DAY, sod - 1];
+      case "7d": return [now() - 7 * DAY, Infinity];
+      case "30d": return [now() - 30 * DAY, Infinity];
+      case "month": { const d = new Date(sod); d.setDate(1); return [d.getTime(), Infinity]; }
+      case "lastmonth": { const a = new Date(sod); a.setDate(1); a.setMonth(a.getMonth() - 1); const b = new Date(sod); b.setDate(1); return [a.getTime(), b.getTime() - 1]; }
+      case "year": return [new Date(new Date().getFullYear(), 0, 1).getTime(), Infinity];
+      case "custom": return [P.from ? new Date(P.from).getTime() : -Infinity, P.to ? new Date(P.to).getTime() + 59999 : Infinity];
+      default: return [-Infinity, Infinity];
+    }
+  }
+  function inRange(d) { if (S.period.p === "all") return true; const [a, b] = periodBounds(), x = t(d); return x >= a && x <= b; }
+  function periodLabel() {
+    const P = S.period; if (/^y\d{4}$/.test(P.p)) return "Year " + P.p.slice(1);
+    if (P.p === "custom") return `${P.from ? fmtDT(P.from) : "start"} – ${P.to ? fmtDT(P.to) : "now"}`;
+    return (PRESETS.find((x) => x[0] === P.p) || PRESETS[0])[1];
+  }
+  function renderPeriod() {
+    const years = [...new Set([...S.raw.checkouts, ...S.raw.orders, ...S.raw.customers].map((x) => new Date(x.created_at).getFullYear()).filter(Boolean).concat(new Date().getFullYear()))].sort((a, b) => b - a);
+    const P = S.period;
+    $("period").innerHTML = `<span class="plab">Show</span>
+      <select class="inp mini" id="pSel" aria-label="Date range">${PRESETS.map(([v, l]) => `<option value="${v}" ${P.p === v ? "selected" : ""}>${l}</option>`).join("")}
+        <optgroup label="Year">${years.map((y) => `<option value="y${y}" ${P.p === "y" + y ? "selected" : ""}>${y}</option>`).join("")}</optgroup></select>
+      <span class="pcustom" ${P.p === "custom" ? "" : "hidden"}><label>From <input class="inp mini" type="datetime-local" id="pFrom" value="${esc(P.from)}"></label><label>To <input class="inp mini" type="datetime-local" id="pTo" value="${esc(P.to)}"></label></span>
+      ${P.p !== "all" ? `<span class="pnow">${esc(periodLabel())}</span><button class="btn small" type="button" id="pClear">Clear</button>` : `<span class="pnow muted">Filters the add-to-cart feed, contacts, checkouts, orders and schedule</span>`}`;
+    $("period").hidden = S.view === "team" || S.view === "pipeline";
+  }
+  function setPeriod(p) { Object.assign(S.period, p); try { localStorage.setItem("pulse-crm-period", JSON.stringify(S.period)); } catch {} render(); }
+  try { const sp = JSON.parse(localStorage.getItem("pulse-crm-period") || "null"); if (sp && sp.p) S.period = sp; } catch {}
+  document.addEventListener("change", (e) => {
+    if (e.target.id === "pSel") setPeriod({ p: e.target.value });
+    if (e.target.id === "pFrom") setPeriod({ from: e.target.value });
+    if (e.target.id === "pTo") setPeriod({ to: e.target.value });
+  });
+  document.addEventListener("click", (e) => { if (e.target.id === "pClear") setPeriod({ p: "all", from: "", to: "" }); });
+
   /* ---------- Views ---------- */
   function renderKpis() {
-    const C = S.contacts, ck = S.raw.checkouts, od = S.raw.orders;
+    const C = S.contacts, ck = S.ck, od = S.raw.orders;
     const fresh = C.filter((p) => p.fresh).length;
     const logins7 = C.filter((p) => p.lastLogin && now() - t(p.lastLogin) < 7 * DAY).length;
     const fresh48 = ck.filter((k) => now() - t(k.created_at) < 2 * DAY).length;
@@ -274,8 +338,8 @@
   }
 
   function cartWho(ev) {
-    const p = ev.customer_id ? byKey("c" + ev.customer_id) : null;
-    if (p) return { p, name: p.name, tag: p.fresh ? "New customer" : "Returning customer" };
+    const c = evCust(ev), p = c ? byKey("c" + c) : null;
+    if (p) return { p, name: p.name, tag: (p.fresh ? "New customer" : "Returning customer") + (!ev.customer_id ? " · before login" : "") };
     const m = ev.meta || {};
     const id = ev.customer_id ? "Customer " + ev.customer_id.slice(-4) : "Guest " + String(ev.visitor || "").slice(-4).toUpperCase();
     return { p: null, name: m.nm || m.em || m.ph || id, tag: ev.customer_id ? "New customer" : "Guest · not logged in" };
@@ -283,24 +347,40 @@
   function cartLine(ev) {
     const m = ev.meta || {}, w = cartWho(ev);
     const what = ev.kind === "checkout"
-      ? `Started checkout${m.n ? " · " + m.n + " item" + (m.n === 1 ? "" : "s") : ""}${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}`
+      ? `${ev.added ? "Added to cart → " : ""}Started checkout${m.n ? " · " + m.n + " item" + (m.n === 1 ? "" : "s") : ""}${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}`
       : `Added ${esc(m.t || "a product")}${m.vt && m.vt !== "Default Title" ? " (" + esc(m.vt) + ")" : ""}${m.q > 1 ? " ×" + m.q : ""}${m.a ? " · " + inr(m.a * (m.q || 1)) : ""}`;
     const contact = !w.p && (m.ph || m.em) ? ` · ${esc(m.ph || m.em)}` : "";
     const head = `<b>${esc(w.name)} <span class="chip ${w.tag.startsWith("Guest") ? "c-signup" : w.tag.startsWith("New") ? "c-checkout" : "c-converted"}">${esc(w.tag)}</span></b>`;
     const sub = `<small>${what}${contact} · ${ago(ev.created_at)} · ${esc(ev.device || "")}</small>`;
     return w.p ? `<div class="li"><div class="who" data-open="${w.p.key}" style="cursor:pointer">${head}${sub}</div>${actions(w.p)}</div>` : `<div class="li"><div class="who">${head}${sub}</div></div>`;
   }
+  /* One row per action: an add-to-cart that went straight to checkout (e.g. "Buy it now") is shown once, on the checkout row. */
+  function cartFeed() {
+    const all = S.raw.events.filter((e) => (e.kind === "cart" || e.kind === "checkout") && (S.period.p === "all" ? now() - t(e.created_at) < 2 * DAY : inRange(e.created_at)));
+    const hide = new Set();
+    for (const ck of all) {
+      if (ck.kind !== "checkout") continue;
+      const title = (ck.meta && ck.meta.t) || "";
+      for (const c of all) {
+        if (c.kind !== "cart" || hide.has(c.id) || evPerson(c) !== evPerson(ck)) continue;
+        const dt = t(ck.created_at) - t(c.created_at);
+        if (dt >= -5e3 && dt < 30 * 60e3 && (!c.meta?.t || title.includes(c.meta.t))) { hide.add(c.id); ck.added = true; }
+      }
+    }
+    return all.filter((e) => !hide.has(e.id));
+  }
   function renderCarts() {
-    const evs = S.raw.events.filter((e) => (e.kind === "cart" || e.kind === "checkout") && now() - t(e.created_at) < 2 * DAY);
-    const people = new Set(evs.map((e) => e.customer_id || e.visitor)).size;
-    $("cartCount").textContent = evs.length ? `${evs.filter((e) => e.kind === "cart").length} add-to-cart · ${people} people · last 48 h` : "Last 48 h";
-    $("cartList").innerHTML = evs.length ? evs.slice(0, 25).map(cartLine).join("") : `<div class="empty">Add-to-cart activity appears here the moment someone adds a wheelchair to their cart.</div>`;
+    const evs = cartFeed();
+    const people = new Set(evs.map(evPerson)).size, nCart = evs.filter((e) => e.kind === "cart" || e.added).length, nCk = evs.filter((e) => e.kind === "checkout").length;
+    $("cartCount").textContent = (evs.length ? `${nCart} added to cart · ${nCk} went to checkout · ${people} people · ` : "") + (S.period.p === "all" ? "last 48 h" : periodLabel());
+    $("cartList").innerHTML = evs.length ? evs.slice(0, 50).map(cartLine).join("") : `<div class="empty">Add-to-cart activity appears here the moment someone adds a wheelchair to their cart.</div>`;
   }
 
   const C_FILTERS = [["all", "All"], ["fresh", "Fresh sign-ups"], ["loggedin", "Logged in (7 d)"], ["checkout", "In checkout"], ["notconverted", "Not converted"], ["pending", "Pending"], ["converted", "Converted"], ["signup", "Signed up only"], ["mine", "Mine"], ["followup", "Has follow-up"]];
   function filterContacts(f, q) {
     q = q.trim().toLowerCase();
     return S.contacts.filter((p) => {
+      if (S.period.p !== "all" && ![p.createdAt, p.lastCheckout, p.lastLogin, p.carts?.[0]?.created_at, p.orders[0]?.created_at].some((d) => d && inRange(d))) return false;
       if (f === "fresh" && !p.fresh) return false;
       if (f === "loggedin" && !(p.lastLogin && now() - t(p.lastLogin) < 7 * DAY)) return false;
       if (f === "followup" && !p.nextFU) return false;
@@ -335,10 +415,10 @@
   const K_FILTERS = [["all", "All"], ["fresh", "Last 48 h"], ["open", "Not converted"], ["done", "Completed"]];
   function renderCheckouts() {
     $("kFilters").innerHTML = K_FILTERS.map(([v, l]) => `<button class="fchip" type="button" data-kf="${v}" aria-pressed="${S.kFilter === v}">${l}</button>`).join("");
-    const rows = S.raw.checkouts.filter((k) => S.kFilter === "all" || (S.kFilter === "fresh" && now() - t(k.created_at) < 2 * DAY) || (S.kFilter === "open" && !k.completed_at) || (S.kFilter === "done" && k.completed_at));
+    const rows = S.ck.filter((k) => inRange(k.created_at)).filter((k) => S.kFilter === "all" || (S.kFilter === "fresh" && now() - t(k.created_at) < 2 * DAY) || (S.kFilter === "open" && !k.completed_at) || (S.kFilter === "done" && k.completed_at));
     $("kBody").innerHTML = rows.length ? rows.slice(0, 500).map((k) => {
       const key = k.customer_id ? "c" + k.customer_id : "g" + k.id, p = byKey(key);
-      const res = k.completed_at ? '<span class="chip c-converted">Completed</span>' : (now() - t(k.created_at) < DAY ? '<span class="chip c-checkout">In progress</span>' : '<span class="chip c-notconverted">Abandoned</span>');
+      const res = k.completed_at ? '<span class="chip c-converted">Completed</span>' : k.live ? '<span class="chip c-checkout">On checkout page · live</span>' : (now() - t(k.created_at) < DAY ? '<span class="chip c-checkout">In progress</span>' : '<span class="chip c-notconverted">Abandoned</span>');
       return `<tr data-open="${key}"><td class="d">${fmtDT(k.created_at)}<span class="sub">${ago(k.created_at)}</span></td>
         <td><b>${esc(p?.name || k.name || "Guest")}</b><span class="sub">${esc(p?.phone || k.phone || p?.email || "")}</span></td>
         <td>${esc(k.items)}</td><td class="d num">${inr(k.total)}</td><td>${res}</td>
@@ -346,7 +426,7 @@
     }).join("") : `<tr><td colspan="6" class="empty">No checkouts here.</td></tr>`;
   }
   function renderOrders() {
-    const od = S.raw.orders;
+    const od = S.raw.orders.filter((o) => inRange(o.created_at));
     $("oBody").innerHTML = od.length ? od.slice(0, 500).map((o) => {
       const key = o.customer_id ? "c" + o.customer_id : "o" + o.id;
       const [pc, pl] = PAY[o.financial] || ["c-signup", o.financial || "—"];
@@ -369,7 +449,7 @@
     $("sFilters").innerHTML = S_FILTERS.map(([v, l]) => `<button class="fchip" type="button" data-sf="${v}" aria-pressed="${S.sFilter === v}">${l}</button>`).join("");
     const sod = new Date(); sod.setHours(0, 0, 0, 0);
     const me = S.me.email.toLowerCase();
-    const rows = allFollowups().filter((f) => S.sFilter === "done" ? f.done : !f.done && (S.sFilter === "upcoming" || (S.sFilter === "mine" && f.assignee_email === me) || (S.sFilter === "overdue" && t(f.due_at) < now()) || (S.sFilter === "today" && t(f.due_at) >= sod.getTime() && t(f.due_at) <= endOfToday())));
+    const rows = allFollowups().filter((f) => inRange(f.due_at)).filter((f) => S.sFilter === "done" ? f.done : !f.done && (S.sFilter === "upcoming" || (S.sFilter === "mine" && f.assignee_email === me) || (S.sFilter === "overdue" && t(f.due_at) < now()) || (S.sFilter === "today" && t(f.due_at) >= sod.getTime() && t(f.due_at) <= endOfToday())));
     $("sList").innerHTML = rows.length ? rows.map(fuRow).join("") : `<div class="empty">Nothing here.${canWrite() ? " Plan a follow-up with the form." : ""}</div>`;
     const sel = $("sWho"), cur = sel.value;
     sel.innerHTML = S.contacts.map((p) => `<option value="${p.key}">${esc(p.name)}${p.phone ? " · " + esc(p.phone) : ""}</option>`).join("");
@@ -387,13 +467,14 @@
   }
   function renderCounts() {
     $("ctContacts").textContent = S.contacts.length;
-    $("ctCheckouts").textContent = S.raw.checkouts.filter((k) => !k.completed_at).length;
+    $("ctCheckouts").textContent = S.ck.filter((k) => !k.completed_at).length;
     $("ctOrders").textContent = S.raw.orders.length;
     $("ctSchedule").textContent = S.raw.followups.filter((f) => !f.done).length;
   }
   function render() {
     if (!S.loaded) return;
     renderCounts();
+    renderPeriod();
     ({ overview: renderOverview, contacts: renderContacts, pipeline: renderPipeline, checkouts: renderCheckouts, orders: renderOrders, schedule: renderSchedule, team: renderTeam })[S.view]?.();
     if (S.open) renderDrawer();
   }
@@ -596,7 +677,7 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_sync_log" }, (p) => { if (p.new?.finished_at && p.new?.ok) loadAll(); else reload("sync"); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "store_events" }, (p) => {
         S.raw.events.unshift(p.new); S.contacts = build(); render();
-        if (p.new?.kind === "cart" || p.new?.kind === "checkout") {
+        if ((p.new?.kind === "cart" && !String(p.new.path || "").startsWith("/checkouts")) || p.new?.kind === "checkout") {
           const w = cartWho(p.new), m = p.new.meta || {};
           notify(p.new.kind === "cart" ? "Added to cart" : "Checkout started", `${w.name} (${w.tag}) ${p.new.kind === "cart" ? "added " + (m.t || "a product") + (m.a ? " · ₹" + Number(m.a * (m.q || 1)).toLocaleString("en-IN") : "") : "started checkout" + (m.tot ? " · ₹" + Number(m.tot).toLocaleString("en-IN") : "")}`);
         }
