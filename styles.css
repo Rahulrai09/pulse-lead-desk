@@ -184,3 +184,23 @@ select.inp.mini{padding:4px 8px;width:auto;font-size:12.5px}
 .period .pcustom label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
 .period .pnow{font-size:13px;font-weight:600}
 .period .muted{font-weight:400}
+
+.c-lead{background:var(--warn-bg);color:var(--warn)}
+.kpis6{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.chart{width:100%;height:auto;display:block}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .ax{fill:var(--muted);font-size:11px;font-family:inherit}
+.chart .bar{fill:var(--navy)}
+.chart .bar:hover{fill:var(--accent)}
+.panel-h{flex-wrap:wrap}
+.row3{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.tl-maker{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.tl-maker summary{cursor:pointer;font-weight:600;color:var(--navy)}
+.tl-maker[open]{display:grid;gap:10px}
+.daily h4{margin:14px 0 6px;font-size:14px}
+.daily ul{margin:0;padding-left:18px;display:grid;gap:4px;font-size:14px}
+.dkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.dkpis div{background:var(--sunk);border-radius:10px;padding:8px 10px;display:grid}
+.dkpis span{font-size:12px;color:var(--muted)}
+.dkpis b{font-size:18px}
+#cFilters .btn{margin-left:auto}

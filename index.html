@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=1792393062">
+<link rel="stylesheet" href="styles.css?v=1792394986">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0}</style>
 </head>
 <body>
@@ -55,6 +55,7 @@
   <div class="wrap">
     <div class="brand"><b>PULSE</b><span>Lead Desk</span></div>
     <div class="sync"><span class="dot" id="syncDot"></span><span id="syncText">Loading…</span></div>
+    <button class="btn primary" id="newLeadBtn" type="button" hidden>+ New lead</button>
     <button class="btn" id="alertsBtn" type="button">Turn on alerts</button>
     <button class="btn" id="refreshBtn" type="button">Refresh</button>
     <div class="me"><b id="meName"></b><span class="role" id="meRole"></span><button class="btn small" type="button" data-logout>Sign out</button></div>
@@ -66,6 +67,7 @@
     <button class="tab" role="tab" data-v="checkouts">Checkouts<span class="ct num" id="ctCheckouts">0</span></button>
     <button class="tab" role="tab" data-v="orders">Orders<span class="ct num" id="ctOrders">0</span></button>
     <button class="tab" role="tab" data-v="schedule">Schedule<span class="ct num" id="ctSchedule">0</span></button>
+    <button class="tab" role="tab" data-v="reports">Reports</button>
     <button class="tab" role="tab" data-v="team" id="teamTab" hidden>Team</button>
   </nav></div>
 </header>
@@ -111,7 +113,8 @@
   <section data-view="contacts" hidden>
     <div class="panel">
       <div class="filters" id="cFilters">
-        <input class="search" id="cSearch" type="search" placeholder="Search name, phone, email, city" aria-label="Search contacts">
+        <input class="search" id="cSearch" type="search" placeholder="Search name, phone, email, city, source" aria-label="Search contacts">
+        <button class="btn small" type="button" data-export="contacts">Download Excel</button>
       </div>
       <div class="tablebox"><table>
         <thead><tr><th>Contact</th><th>Status</th><th>Stage</th><th>Signed up</th><th>Last login</th><th>Last checkout</th><th>Value</th><th>Owner</th><th>Next follow-up</th></tr></thead>
@@ -129,7 +132,7 @@
 
   <section data-view="checkouts" hidden>
     <div class="panel">
-      <div class="panel-h"><h2>Checkouts</h2><p>Every checkout started on the store, newest first</p></div>
+      <div class="panel-h"><h2>Checkouts</h2><p>Every checkout started on the store, newest first</p><button class="btn small" type="button" data-export="checkouts" style="margin-left:auto">Download Excel</button></div>
       <div class="filters" id="kFilters"></div>
       <div class="tablebox"><table>
         <thead><tr><th>Started</th><th>Customer</th><th>Wheelchair</th><th>Value</th><th>Result</th><th></th></tr></thead>
@@ -140,7 +143,7 @@
 
   <section data-view="orders" hidden>
     <div class="panel">
-      <div class="panel-h"><h2>Orders</h2><p>Paid, pending and cancelled orders</p></div>
+      <div class="panel-h"><h2>Orders</h2><p>Paid, pending and cancelled orders</p><button class="btn small" type="button" data-export="orders" style="margin-left:auto">Download Excel</button></div>
       <div class="tablebox"><table>
         <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Items</th><th>Value</th><th>Payment</th><th>Delivery</th></tr></thead>
         <tbody id="oBody"></tbody>
@@ -151,7 +154,7 @@
   <section data-view="schedule" hidden>
     <div class="two">
       <div class="panel">
-        <div class="panel-h"><h2>Follow-up schedule</h2><p>Calls, demos and visits your team has planned</p></div>
+        <div class="panel-h"><h2>Follow-up schedule</h2><p>Calls, demos and visits your team has planned</p><button class="btn small" type="button" data-export="schedule" style="margin-left:auto">Download Excel</button></div>
         <div class="filters" id="sFilters"></div>
         <div class="list" id="sList"></div>
       </div>
@@ -170,6 +173,46 @@
           <div class="field"><label for="sNote">Note</label><textarea class="inp" id="sNote" placeholder="e.g. Share EMI options for Premium Comfort"></textarea></div>
           <button class="btn primary" type="submit">Add to schedule</button>
         </form>
+      </div>
+    </div>
+  </section>
+
+  <section data-view="reports" hidden>
+    <p class="syncnote" style="margin:0 0 10px">Showing <b id="repRange">All time</b>. Change the dates with the Show bar above. <span id="repStatus"></span></p>
+    <div class="kpis kpis6" id="repKpis"></div>
+    <div class="panel" style="margin-top:18px">
+      <div class="panel-h"><h2>Over time</h2><p id="repChartNote"></p>
+        <div class="acts" style="margin-left:auto"><select class="inp mini" id="repMetric" aria-label="What to show"></select><select class="inp mini" id="repGroup" aria-label="Group by"></select></div></div>
+      <div id="repChart"></div>
+    </div>
+    <div class="panel" style="margin-top:18px">
+      <div class="panel-h"><h2>Where visitors come from</h2><p>First place each person came from: Google, Instagram, ads, WhatsApp…</p><button class="btn small" type="button" data-export-table="repSources|Traffic sources" style="margin-left:auto">Download Excel</button></div>
+      <div class="tablebox"><table style="min-width:640px"><thead><tr><th>Source</th><th>Visitors</th><th>Added to cart</th><th>Reached payment</th><th>Orders</th><th>Revenue</th><th>Conversion</th></tr></thead><tbody id="repSources"></tbody></table></div>
+      <details class="tl-maker"><summary>Make a tracking link for an ad, post or WhatsApp message</summary>
+        <p class="muted">Use this link in your Instagram/Facebook/Google ad or post. Visitors who click it will show under that source and campaign above.</p>
+        <div class="row3">
+          <div class="field"><label for="tlSrc">Where will you post it?</label><select class="inp" id="tlSrc">
+            <option value="instagram|paid">Instagram ad</option><option value="facebook|paid">Facebook ad</option><option value="google|cpc">Google ad</option>
+            <option value="instagram|social">Instagram post / bio</option><option value="facebook|social">Facebook post</option><option value="whatsapp|social">WhatsApp message / status</option>
+            <option value="youtube|video">YouTube video</option><option value="email|email">Email</option><option value="qr|offline">QR code / brochure</option></select></div>
+          <div class="field"><label for="tlCmp">Campaign name</label><input class="inp" id="tlCmp" placeholder="e.g. diwali-offer"></div>
+          <div class="field"><label for="tlUrl">Page</label><input class="inp" id="tlUrl" value="https://motion-pulse.myshopify.com/"></div>
+        </div>
+        <div class="acts"><input class="inp" id="tlOut" readonly style="flex:1;min-width:240px" aria-label="Tracking link"><button class="btn primary" type="button" id="tlCopy">Copy link</button></div>
+      </details>
+    </div>
+    <div class="panel" style="margin-top:18px">
+      <div class="panel-h"><h2>Product interest</h2><p>People who looked at, added and bought each wheelchair</p><button class="btn small" type="button" data-export-table="repProducts|Product interest" style="margin-left:auto">Download Excel</button></div>
+      <div class="tablebox"><table style="min-width:640px"><thead><tr><th>Wheelchair</th><th>Viewed</th><th>Added to cart</th><th>Reached payment</th><th>Bought</th><th>View → cart</th><th>Cart → bought</th></tr></thead><tbody id="repProducts"></tbody></table></div>
+    </div>
+    <div class="two" style="margin-top:18px">
+      <div class="panel">
+        <div class="panel-h"><h2>What people search for</h2><p>Words typed in the store search</p><button class="btn small" type="button" data-export-table="repSearches|Searches" style="margin-left:auto">Download Excel</button></div>
+        <div class="tablebox"><table style="min-width:300px"><thead><tr><th>Search</th><th>Times</th><th>People</th></tr></thead><tbody id="repSearches"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h2>Morning report</h2><p>Made every day at 9:00 am</p></div>
+        <div id="repDaily" class="daily"></div>
       </div>
     </div>
   </section>
@@ -205,7 +248,8 @@
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="config.js?v=1792393062"></script>
-<script src="app.js?v=1792393062"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<script src="config.js?v=1792394986"></script>
+<script src="app.js?v=1792394986"></script>
 </body>
 </html>
