@@ -344,7 +344,7 @@
       ["Not converted", notc.length, `${inr(lost)} left in checkout`, "k-bad", "contacts:notconverted"],
       ["Pending", pend, "orders to collect or ship", "k-warn", "orders"],
       ["Due today", dueToday, `${fu.length} follow-up${fu.length === 1 ? "" : "s"} open`, dueToday ? "k-warn" : "", "schedule"],
-      ["Total contacts", C.length, `${S.raw.customers.length} accounts · ${C.filter((p) => p.source === "lead").length} leads · ${C.filter((p) => p.source === "guest").length} guests`, "", "contacts:all"],
+      ["Total contacts", C.length, `${S.raw.customers.length} accounts · ${C.filter((p) => p.leads?.length).length} leads · ${C.filter((p) => p.source === "guest").length} guests`, "", "contacts:all"],
     ];
     $("kpis").innerHTML = k.map(([l, v, s, cls, go]) => `<button type="button" class="kpi ${cls}" data-go="${go}"><span class="l">${l}</span><span class="v num">${v}</span><span class="s">${esc(s)}</span></button>`).join("");
   }
@@ -353,6 +353,9 @@
     renderKpis();
     renderBrowsing();
     renderCarts();
+    const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => S.period.p === "all" ? now() - t(x.created_at) < 14 * DAY : inRange(x.created_at)).slice(0, 10);
+    $("leadsCount").textContent = L.length ? `${L.length} in the ${S.period.p === "all" ? "last 14 days" : periodLabel()}` : "";
+    $("leadsList").innerHTML = L.length ? L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p ? li(p, `<b>${esc(x.kind)}</b> · ${esc(x.source)} · ${ago(x.created_at)}${x.note ? " · " + esc(x.note.split("\n")[0].slice(0, 80)) : ""}`) : ""; }).join("") : `<div class="empty">Leads you add and website forms (rent, donate, demo, contact) appear here.</div>`;
     const hot = S.contacts.filter((p) => (p.status === "notconverted" || p.status === "checkout") && now() - t(p.lastCheckout) < 14 * DAY);
     $("hotList").innerHTML = hot.length ? hot.slice(0, 10).map((p) => li(p, `${esc(p.cart || "Checkout")} · ${inr(p.value)} · ${ago(p.lastCheckout)}${p.owner ? " · " + esc(memberName(p.owner)) : ""}`)).join("") : `<div class="empty">No unconverted checkouts in the last 14 days.</div>`;
     const C = S.contacts;
