@@ -119,6 +119,12 @@
         sb.from("crm_team").select("*").order("created_at").then((r) => r.data || []),
         sb.from("crm_sync_log").select("*").order("started_at", { ascending: false }).limit(12).then((r) => r.data || []),
       ]);
+      if (S.loaded) {
+        const oldC = new Set(S.raw.customers.map((c) => c.id)), oldK = new Set(S.raw.checkouts.map((k) => k.id)), oldO = new Set(S.raw.orders.map((o) => o.id));
+        customers.filter((c) => !oldC.has(c.id)).forEach((c) => notify("New sign-up", `${c.name || c.email || c.phone || "A new customer"} just created an account`));
+        checkouts.filter((k) => !oldK.has(k.id)).forEach((k) => notify("New checkout", `${k.name || k.email || k.phone || "Someone"} started checkout${k.total ? " · ₹" + Number(k.total).toLocaleString("en-IN") : ""}`));
+        orders.filter((o) => !oldO.has(o.id)).forEach((o) => notify("New order", `${o.customer_name || o.email || "A customer"} placed ${o.name || "an order"}`));
+      }
       Object.assign(S.raw, { customers, checkouts, orders, events, contacts, notes, followups, team, sync });
       S.contacts = build();
       S.loaded = true;
@@ -513,6 +519,36 @@
   });
   $("cSearch").addEventListener("input", (e) => { S.search = e.target.value; renderContacts(); });
 
+  /* ---------- Alerts: on-screen pop-up, sound, and desktop/phone notification ---------- */
+  let audio = null;
+  function beep() {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = 880; g.gain.setValueAtTime(0.15, audio.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.5);
+      o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.5);
+    } catch {}
+  }
+  function notify(title, body) {
+    const el = $("toast"); el.textContent = title + ": " + body; el.hidden = false;
+    clearTimeout(toast._t); toast._t = setTimeout(() => (el.hidden = true), 8000);
+    beep();
+    try { if ("Notification" in window && Notification.permission === "granted") new Notification("Pulse · " + title, { body, tag: title + body }); } catch {}
+  }
+  function alertsLabel() {
+    const b = $("alertsBtn"); if (!b) return;
+    const on = "Notification" in window && Notification.permission === "granted";
+    b.textContent = on ? "Alerts on" : "Turn on alerts"; b.classList.toggle("primary", !on);
+  }
+  $("alertsBtn")?.addEventListener("click", async () => {
+    beep();
+    if (!("Notification" in window)) { toast("This browser can't show notifications. Pop-ups and sound still work while this tab is open."); return; }
+    if (Notification.permission === "denied") { toast("Notifications are blocked. Allow them from the lock icon next to the address bar."); return; }
+    await Notification.requestPermission(); alertsLabel();
+    if (Notification.permission === "granted") notify("Alerts on", "You'll be notified of new sign-ups, logins, checkouts and orders while Lead Desk is open.");
+  });
+  alertsLabel();
+
   /* ---------- Sync + live updates ---------- */
   async function runSync() {
     setSync("busy", "Syncing with Shopify…");
@@ -530,7 +566,13 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_notes" }, () => reload("notes"))
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_followups" }, () => reload("followups"))
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_sync_log" }, (p) => { if (p.new?.finished_at && p.new?.ok) loadAll(); else reload("sync"); })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "store_events" }, (p) => { S.raw.events.unshift(p.new); S.contacts = build(); render(); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "store_events" }, (p) => {
+        S.raw.events.unshift(p.new); S.contacts = build(); render();
+        if (p.new?.kind === "login") {
+          const c = S.raw.customers.find((x) => x.id === p.new.customer_id);
+          notify("Customer logged in", `${c ? (c.name || c.email || c.phone) : "A new customer"} just logged in on the store (${p.new.device || "web"})`);
+        }
+      })
       .subscribe();
     poll = setInterval(() => { if (!document.hidden) { syncStatus(); render(); } }, 60_000);
   }

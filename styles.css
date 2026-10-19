@@ -178,3 +178,5 @@ select.inp.mini{padding:4px 8px;width:auto;font-size:12.5px}
 .li{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .li .who{flex:1 1 220px}
 .li .acts{justify-content:flex-start}
+.toast{max-width:min(92vw,560px);text-align:center;line-height:1.4}
+@media (max-width:640px){#alertsBtn,#refreshBtn{padding:6px 10px;font-size:13px}}
