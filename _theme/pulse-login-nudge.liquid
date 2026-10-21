@@ -1,0 +1,29 @@
+{%- comment -%}
+  Pulse: opens the store's login / sign-up pop-up (OTP+ phone login on the account icon)
+  about 2.5 seconds after a signed-out visitor arrives. Once per browser session, and never on
+  cart, checkout, account, password or policy pages. If the login app hasn't loaded, nothing happens.
+{%- endcomment -%}
+{%- unless customer -%}
+{%- assign pln_skip = false -%}
+{%- if template.name == 'cart' or template.name == 'password' or template.name == 'policy' or template contains 'customers' or request.path contains '/policies/' or request.path contains '/apps/' -%}{%- assign pln_skip = true -%}{%- endif -%}
+{%- unless pln_skip -%}
+<script>
+  (function () {
+    var K = 'pulse_login_nudge';
+    try { if (sessionStorage.getItem(K)) return; } catch (e) { return; }
+    setTimeout(function () {
+      try { if (sessionStorage.getItem(K)) return; sessionStorage.setItem(K, '1'); } catch (e) { return; }
+      // Don't interrupt someone who is filling in a form or already has a pop-up open.
+      if (document.querySelector('input:focus,textarea:focus,select:focus,.pdm.is-open,dialog[open]')) return;
+      var a = document.querySelector('[data-pulse-account]');
+      if (!a) return;
+      // Let the login app handle the click; if it doesn't (not loaded yet), stop the page from navigating away.
+      var guard = function (e) { if (!e.defaultPrevented) e.preventDefault(); document.removeEventListener('click', guard); };
+      document.addEventListener('click', guard);
+      a.click();
+      setTimeout(function () { document.removeEventListener('click', guard); }, 0);
+    }, 2500);
+  })();
+</script>
+{%- endunless -%}
+{%- endunless -%}
