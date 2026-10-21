@@ -250,18 +250,20 @@
 
   /* ---------- Render helpers ---------- */
   const chip = (p) => `<span class="chip c-${p.status}">${esc(p.statusText)}</span>`;
-  function actions(p) {
+  // link: show the checkout link only on rows about a checkout (not on cart-only, login or enquiry rows).
+  function actions(p, link = true) {
     const a = [];
+    const rec = link ? p.recover : "";
     if (p.phone) {
       const first = p.name.split(" ")[0] || "";
-      const msg = p.recover && p.status !== "converted"
-        ? `Hi ${first}, this is Pulse Wheelchairs. Your ${p.cart || "wheelchair"} is still saved in your cart. You can complete your order here: ${p.recover}\nFree delivery in 3–5 days. Reply here if you have any questions.`
+      const msg = rec && p.status !== "converted"
+        ? `Hi ${first}, this is Pulse Wheelchairs. Your ${p.cart || "wheelchair"} is still saved in your cart. You can complete your order here: ${rec}\nFree delivery in 3–5 days. Reply here if you have any questions.`
         : `Hi ${first}, this is Pulse Wheelchairs. `;
-      a.push(`<a class="btn small" href="https://wa.me/${waNum(p.phone)}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" title="${p.recover ? "Opens WhatsApp with their checkout link ready to send" : "Open WhatsApp chat"}">WhatsApp${p.recover && p.status !== "converted" ? " + link" : ""}</a>`);
+      a.push(`<a class="btn small" href="https://wa.me/${waNum(p.phone)}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" title="${rec ? "Opens WhatsApp with their checkout link ready to send" : "Open WhatsApp chat"}">WhatsApp${rec && p.status !== "converted" ? " + link" : ""}</a>`);
       a.push(`<a class="btn small" href="tel:${esc(p.phone)}">Call</a>`);
       a.push(`<button class="btn small" type="button" data-copy="${esc(p.phone)}" data-label="Phone number">${esc(p.phone)}</button>`);
     }
-    if (p.recover) a.push(`<button class="btn small" type="button" data-copy="${esc(p.recover)}" data-label="Checkout link">Copy checkout link</button>`);
+    if (rec) a.push(`<button class="btn small" type="button" data-copy="${esc(rec)}" data-label="Checkout link">Copy checkout link</button>`);
     return `<div class="acts">${a.join("")}</div>`;
   }
   function setSync(state, text) { $("syncDot").className = "dot " + state; $("syncText").textContent = text; }
@@ -348,7 +350,7 @@
     ];
     $("kpis").innerHTML = k.map(([l, v, s, cls, go]) => `<button type="button" class="kpi ${cls}" data-go="${go}"><span class="l">${l}</span><span class="v num">${v}</span><span class="s">${esc(s)}</span></button>`).join("");
   }
-  function li(p, sub) { return `<div class="li"><div class="who" data-open="${p.key}" style="cursor:pointer"><b>${esc(p.name)} ${chip(p)}</b><small>${sub}</small></div>${actions(p)}</div>`; }
+  function li(p, sub, link = false) { return `<div class="li"><div class="who" data-open="${p.key}" style="cursor:pointer"><b>${esc(p.name)} ${chip(p)}</b><small>${sub}</small></div>${actions(p, link)}</div>`; }
   function renderOverview() {
     renderKpis();
     renderBrowsing();
@@ -357,7 +359,7 @@
     $("leadsCount").textContent = L.length ? `${L.length} in the ${S.period.p === "all" ? "last 14 days" : periodLabel()}` : "";
     $("leadsList").innerHTML = L.length ? L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p ? li(p, `<b>${esc(x.kind)}</b> · ${esc(x.source)} · ${ago(x.created_at)}${x.note ? " · " + esc(x.note.split("\n")[0].slice(0, 80)) : ""}`) : ""; }).join("") : `<div class="empty">Leads you add and website forms (rent, donate, demo, contact) appear here.</div>`;
     const hot = S.contacts.filter((p) => (p.status === "notconverted" || p.status === "checkout") && now() - t(p.lastCheckout) < 14 * DAY);
-    $("hotList").innerHTML = hot.length ? hot.slice(0, 10).map((p) => li(p, `${esc(p.cart || "Checkout")} · ${inr(p.value)} · ${ago(p.lastCheckout)}${p.owner ? " · " + esc(memberName(p.owner)) : ""}`)).join("") : `<div class="empty">No unconverted checkouts in the last 14 days.</div>`;
+    $("hotList").innerHTML = hot.length ? hot.slice(0, 10).map((p) => li(p, `${esc(p.cart || "Checkout")} · ${inr(p.value)} · ${ago(p.lastCheckout)}${p.owner ? " · " + esc(memberName(p.owner)) : ""}`, true)).join("") : `<div class="empty">No unconverted checkouts in the last 14 days.</div>`;
     const C = S.contacts;
     const steps = [["Contacts", C.length], ["Signed up", C.filter((p) => p.source === "customer").length], ["Started checkout", C.filter((p) => p.checkouts.length).length], ["Converted", C.filter((p) => p.status === "converted").length]];
     const max = Math.max(1, steps[0][1]);
@@ -385,7 +387,7 @@
     const contact = !w.p && (m.ph || m.em) ? ` · ${esc(m.ph || m.em)}` : "";
     const head = `<b>${esc(w.name)} <span class="chip ${w.tag.startsWith("Guest") ? "c-signup" : w.tag.startsWith("New") ? "c-checkout" : "c-converted"}">${esc(w.tag)}</span></b>`;
     const sub = `<small>${what}${contact} · ${ago(ev.created_at)} · ${esc(ev.device || "")}</small>`;
-    return w.p ? `<div class="li"><div class="who" data-open="${w.p.key}" style="cursor:pointer">${head}${sub}</div>${actions(w.p)}</div>` : `<div class="li"><div class="who">${head}${sub}</div></div>`;
+    return w.p ? `<div class="li"><div class="who" data-open="${w.p.key}" style="cursor:pointer">${head}${sub}</div>${actions(w.p, ev.kind === "checkout")}</div>` : `<div class="li"><div class="who">${head}${sub}</div></div>`;
   }
   /* One row per action: an add-to-cart that went straight to checkout (e.g. "Buy it now") is shown once, on the checkout row. */
   function cartFeed() {
