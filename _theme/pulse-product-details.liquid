@@ -1,0 +1,712 @@
+{%- liquid
+  assign desc_parts = product.description | split: '===SPECIFICATIONS==='
+  assign desc_html = desc_parts[0]
+  assign spec_items = desc_parts[1] | split: '</p>'
+  assign spec_range = ''
+  assign spec_load = ''
+  assign spec_weight = ''
+  assign spec_frame = ''
+  assign spec_seat = ''
+  assign spec_battery = ''
+  assign spec_wheels = ''
+  assign spec_tyres = ''
+  for item in spec_items
+    assign line = item | strip_html | strip
+    if line contains ':'
+      assign key = line | split: ':' | first | strip
+      assign val = line | remove_first: key | remove_first: ':' | strip
+      if key == 'Driving Range'
+        assign spec_range = val
+      elsif key == 'Max Load Capacity'
+        assign spec_load = val
+      elsif key == 'Net Weight'
+        assign spec_weight = val
+      elsif key == 'Frame Material'
+        assign spec_frame = val
+      elsif key == 'Seat Size'
+        assign spec_seat = val
+      elsif key == 'Battery'
+        assign spec_battery = val
+      elsif key == 'Front / Rear Wheels'
+        assign spec_wheels = val
+      elsif key == 'Tyres'
+        assign spec_tyres = val
+      endif
+    endif
+  endfor
+  assign hl_range = ''
+  if spec_range != blank
+    assign hl_parts = spec_range | replace: '–', '-' | replace: '—', '-' | split: '-'
+    assign hl_range = hl_parts | last | strip
+    unless hl_range contains 'km'
+      assign hl_range = hl_range | append: ' km'
+    endunless
+  endif
+  assign has_discount = false
+  if product.compare_at_price > product.price
+    assign has_discount = true
+    assign diff = product.compare_at_price | minus: product.price
+    assign half = product.compare_at_price | divided_by: 2
+    assign off_pct = diff | times: 100 | plus: half | divided_by: product.compare_at_price
+  endif
+  assign tags = product.tags
+  assign isz = product.images.size
+  assign summary = desc_html | replace: '</p>', '</p> ' | replace: '</li>', '</li> ' | strip_html | strip_newlines | strip | truncate: 160
+  assign ad_variant = product.selected_or_first_available_variant
+  assign ad_phone = section.settings.phone_number | default: section.settings.whatsapp_number
+  assign ad_phone_label = section.settings.phone_label | default: ad_phone
+  assign warranty_handle = section.settings.warranty_page | default: 'warranty-policy'
+  assign warranty_page = pages[warranty_handle]
+  assign returns_handle = section.settings.returns_page | default: 'returns-service'
+  assign returns_page = pages[returns_handle]
+  assign manual_file = product.metafields.custom.owners_manual.value
+  # Specs and tags already shown on this page as icons or cards are not repeated
+  # in the Product Details table or the Quick Product Highlights cards.
+  assign shown_keys = 'Driving Range|Max Load Capacity|Net Weight|Frame Material' | split: '|'
+  assign dup_words = 'Range|Battery|Brake|Fold|Light|Frame|Carbon|Control|Joystick|360°|Ah|Iron' | split: '|'
+  assign hl_list = ''
+  for tag in product.tags
+    assign is_dup = false
+    for w in dup_words
+      if tag contains w
+        assign is_dup = true
+        break
+      endif
+    endfor
+    unless is_dup
+      assign hl_list = hl_list | append: tag | append: '|~|'
+    endunless
+  endfor
+  assign hl_tags = hl_list | split: '|~|'
+  assign hn = hl_tags.size | at_most: 5
+-%}
+{{ 'pulse-custom.css' | asset_url | stylesheet_tag }}
+<script type="module" src="{{ 'pulse-cart.js' | asset_url }}"></script>
+{% style %}
+  .ad{--navy:#1B355E;--ink:#0F1E36;--mut:#5B6B82;--org:#EE8B1B;--grn:#0B7A57;--grn-bg:#E3F7F0;--card:#EEF3F9;--line:#E4E9F0;--soft:#F5F7FA;max-width:1240px;margin:0 auto;padding:0 24px 56px;font-family:var(--pulse-font-sans,system-ui,sans-serif);font-size:14px;color:var(--ink);-webkit-font-smoothing:antialiased;}
+  .ad *{box-sizing:border-box;}
+  .ad svg{flex-shrink:0;}
+  .ad-crumb{font-size:12px;color:var(--mut);padding:22px 0 20px;}
+  .ad-crumb a{color:inherit;text-decoration:none;transition:color .2s;}.ad-crumb a:hover{color:var(--navy);}
+  .ad-crumb span{margin:0 8px;opacity:.5;}
+  .ad-top{display:grid;grid-template-columns:1.1fr 1fr;gap:56px;align-items:start;}
+  .ad-gal{--gal-h:540px;display:grid;grid-template-columns:84px minmax(0,1fr);gap:16px;align-items:start;position:sticky;top:96px;}
+  .ad-gal--one{grid-template-columns:minmax(0,1fr);}
+  .ad-thw{height:var(--gal-h);display:flex;flex-direction:column;gap:8px;min-width:0;}
+  .ad-th{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;overflow-y:auto;overflow-x:hidden;scroll-snap-type:y proximity;scroll-behavior:smooth;overscroll-behavior:contain;scrollbar-width:none;}
+  .ad-th::-webkit-scrollbar{display:none;}
+  .ad .ad-t{flex:0 0 auto;width:84px;height:84px;min-height:0;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden;padding:5px;cursor:pointer;scroll-snap-align:start;transition:border-color .2s;}
+  .ad .ad-t img{width:100%;height:100%;object-fit:contain;display:block;}
+  .ad .ad-t:hover{border-color:#C9D4E3;}.ad .ad-t.on{border:2px solid var(--navy);}
+  .ad .ad-tnav{flex:0 0 auto;width:84px;height:30px;min-height:0;padding:0;margin:0;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--navy);display:grid;place-items:center;cursor:pointer;transition:all .2s;}
+  .ad .ad-tnav svg{width:16px;height:16px;}
+  .ad .ad-tnav:hover:not([disabled]){background:var(--navy);color:#fff;border-color:var(--navy);}
+  .ad .ad-tnav[disabled]{opacity:.35;cursor:default;}
+  .ad .ad-tnav[hidden]{display:none;}
+  .ad-stage{position:relative;height:var(--gal-h);border:1px solid var(--line);border-radius:24px;background:radial-gradient(110% 90% at 50% 25%,#fff 0%,#F1F5FA 65%,#E6ECF4 100%);overflow:hidden;}
+  .ad-track{display:flex;height:100%;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-behavior:smooth;overscroll-behavior-x:contain;scrollbar-width:none;cursor:grab;}
+  .ad-track::-webkit-scrollbar{display:none;}
+  .ad-track.drag{cursor:grabbing;scroll-snap-type:none;scroll-behavior:auto;}
+  .ad-slide{flex:0 0 100%;height:100%;scroll-snap-align:center;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;padding:32px;}
+  .ad-slide img{max-width:100%;max-height:100%;object-fit:contain;mix-blend-mode:multiply;-webkit-user-drag:none;user-select:none;pointer-events:none;}
+  .ad-count{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgba(15,30,54,.72);color:#fff;font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;letter-spacing:.04em;pointer-events:none;}
+  .ad .ad-arr{position:absolute;top:50%;transform:translateY(-50%);width:42px;height:42px;min-height:0;padding:0;border-radius:50%;background:#fff;color:var(--navy);font-size:22px;line-height:1;display:grid;place-items:center;border:1px solid var(--line);cursor:pointer;box-shadow:0 8px 20px -10px rgba(15,30,54,.35);transition:all .2s;}
+  .ad .ad-arr:hover{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .ad .ad-a1{left:16px;}.ad .ad-a2{right:16px;}
+  .ad-rate{font-size:12px;font-weight:600;color:var(--navy);min-height:16px;margin-bottom:8px;}
+  .ad-eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:11.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--org);text-decoration:none;}
+  .ad-eyebrow:before{content:'';width:24px;height:1.5px;background:currentColor;}
+  .ad h1.ad-h1 .ad-eyebrow--name{display:flex;width:max-content;max-width:100%;margin:0 0 10px;line-height:1.3;}
+  .ad h1.ad-h1{font-size:clamp(26px,2.8vw,36px);line-height:1.15;letter-spacing:-.02em;color:var(--ink);font-weight:700;margin:12px 0 12px;}
+  .ad-titlerow{display:flex;align-items:flex-start;gap:16px;margin:12px 0 12px;}
+  .ad .ad-titlerow h1.ad-h1{margin:0;flex:1;min-width:0;}
+  .ad-sub{font-size:14.5px;line-height:1.65;color:var(--mut);margin:0;max-width:540px;}
+  .ad-pricebox{margin-top:24px;padding-top:22px;border-top:1px solid var(--line);}
+  .ad-price{display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
+  .ad-price b{font-size:34px;font-weight:700;letter-spacing:-.02em;color:var(--ink);line-height:1;}
+  .ad-price s{font-size:15px;color:var(--mut);}
+  .ad-off{background:var(--grn-bg);color:var(--grn);font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;letter-spacing:.02em;}
+  .ad-tax{font-size:12.5px;color:var(--mut);margin-top:8px;}
+  .ad-save{color:var(--grn);font-weight:600;}
+  .ad-emi{margin-top:16px;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:var(--soft);border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--navy);}
+  .ad-emi svg{width:18px;height:18px;}
+  .ad-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px;}
+  .ad .ad-btn{width:100%;height:54px;min-height:0;padding:0 16px;margin:0;border-radius:12px;font:700 15px/1 var(--pulse-font-sans,system-ui,sans-serif);letter-spacing:normal;text-transform:none;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;cursor:pointer;transition:all .25s cubic-bezier(.2,.7,.2,1);}
+  .ad .ad-btn svg{width:18px;height:18px;transition:transform .25s;}
+  .ad .ad-btn--ghost{background:#fff;color:var(--navy);border:1.5px solid var(--navy);box-shadow:none;}
+  .ad .ad-btn--ghost:hover{background:var(--navy);color:#fff;}
+  .ad .ad-btn--primary{background:linear-gradient(180deg,#24467A,#1B355E);color:#fff;border:0;box-shadow:0 12px 24px -12px rgba(27,53,94,.75);}
+  .ad .ad-btn--primary:hover{transform:translateY(-1px);box-shadow:0 16px 30px -12px rgba(27,53,94,.85);color:#fff;}
+  .ad .ad-btn--primary:hover svg{transform:translateX(3px);}
+  .ad .ad-btn[disabled]{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none;}
+  .ad-alt{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;}
+  .ad .ad-alt a{height:48px;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;transition:border-color .2s,background .2s;}
+  .ad .ad-alt a:hover{border-color:var(--navy);background:var(--soft);}
+  .ad-alt svg{width:18px;height:18px;}
+  .ad-wa svg{color:#002A74;width:19px;height:19px;}.ad .ad-alt a.ad-wa{transition:background .2s,border-color .2s,color .2s;}.ad .ad-alt a.ad-wa:hover,.ad .ad-alt a.ad-wa:focus-visible{background:#25D366;border-color:#25D366;color:#fff;}.ad .ad-alt a.ad-wa:hover svg,.ad .ad-alt a.ad-wa:focus-visible svg{color:#fff;}.ad-wa svg *{transition:fill .2s,stroke .2s;}.ad-tel svg{color:var(--navy);}
+  .ad-hl4{display:grid;grid-template-columns:1fr 1fr;gap:18px 20px;margin:24px 0 0;padding:22px 0 0;border-top:1px solid var(--line);list-style:none;}
+  .ad-hl4 li{display:flex;align-items:center;gap:14px;font-size:14.5px;line-height:1.35;color:#3B4A62;}
+  .ad-hl4 li b{color:var(--ink);font-weight:700;}
+  .ad-hl4 i{flex-shrink:0;display:grid;place-items:center;width:62px;height:62px;border-radius:50%;border:1px solid var(--line);background:#fff;box-shadow:0 6px 14px -10px rgba(15,30,54,.35);}
+  .ad-hl4 i svg{width:34px;height:34px;}
+  .ad-assure{list-style:none;display:flex;flex-wrap:wrap;gap:10px 22px;margin:20px 0 0;padding:18px 0 0;border-top:1px solid var(--line);}
+  .ad-assure li{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--mut);}
+  .ad-assure svg{width:17px;height:17px;color:var(--navy);}
+  .ad-del{margin-top:22px;}
+  .ad-del label{display:block;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:10px;}
+  .ad-delr{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 6px 6px 14px;transition:border-color .2s;}
+  .ad-delr:focus-within{border-color:var(--navy);}
+  .ad-delr svg{width:18px;height:18px;color:var(--mut);}
+  .ad .ad-delr input{border:0;outline:0;box-shadow:none;background:transparent;font:500 14px var(--pulse-font-sans,system-ui,sans-serif);color:var(--ink);flex:1;min-width:0;padding:8px 0;height:auto;min-height:0;}
+  .ad .ad-delr button{background:var(--navy);color:#fff;border:0;border-radius:9px;height:40px;min-height:0;padding:0 22px;font:700 13px var(--pulse-font-sans,system-ui,sans-serif);cursor:pointer;transition:background .2s;}
+  .ad .ad-delr button:hover{background:var(--ink);}
+  .ad-delmsg{font-size:12.5px;margin:8px 0 0;color:var(--grn);}
+  .ad-delmsg.err{color:#B42318;}
+  .ad-fs{display:grid;grid-template-columns:repeat(5,1fr);text-align:center;margin:56px 0 8px;padding:28px 12px;background:#fff;border:1px solid var(--line);border-radius:22px;color:var(--ink);font-size:15px;font-weight:700;}
+  .ad-fs > div + div{border-left:1px solid var(--line);}
+  .ad-fs i{display:grid;place-items:center;width:50px;height:50px;margin:0 auto 10px;border-radius:50%;background:var(--card);color:var(--navy);}
+  .ad-fs i svg{width:22px;height:22px;}
+  .ad-fs i .acc{stroke:#F7A640;}
+  .ad-fs small{display:block;font-weight:500;color:var(--mut);font-size:12.5px;margin-top:4px;}
+  .ad h2.ad-h2{text-align:center;font-size:clamp(26px,3vw,34px);color:var(--ink);font-weight:700;margin:56px 0 24px;letter-spacing:-.02em;}
+  .ad-hl{display:grid;grid-template-columns:1fr 2.15fr;gap:14px;}
+  .ad-c{background:var(--card);border-radius:16px;padding:18px 20px;overflow:hidden;position:relative;}
+  .ad-c h3{font-size:15px;color:var(--ink);font-weight:700;line-height:1.3;}.ad-c p{font-size:12px;color:var(--mut);margin-top:6px;line-height:1.6;}
+  .ad-c img{display:block;width:100%;object-fit:cover;}
+  .ad-big{display:flex;flex-direction:column;}.ad-big h3{font-size:22px;}.ad-big p{font-size:15px;color:var(--ink);}.ad-big img{margin-top:auto;object-fit:contain;height:340px;}
+  .ad-g6{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;}
+  .ad-s3{grid-column:span 3;}.ad-s2{grid-column:span 2;}
+  .ad-s3 img{height:120px;margin:8px -20px -18px;width:calc(100% + 40px);}.ad-s2 img{height:150px;margin:8px -20px -18px;width:calc(100% + 40px);}
+  .ad-s2 h3{font-size:14px;}.ad-s2 p{font-size:10px;}
+  .ad-s6{grid-column:span 6;display:flex;flex-direction:column;}.ad-s6 img{margin:12px -20px -18px auto;width:calc(100% + 40px);height:300px;object-fit:contain;}
+  .ad-hl--solo{grid-template-columns:1fr;}
+  .ad-hlwrap{position:relative;isolation:isolate;overflow:hidden;margin:56px 0 0;padding:4px 28px 32px;border-radius:32px;background:linear-gradient(155deg,var(--hl-a) 0%,color-mix(in srgb,var(--hl-a) 70%,var(--hl-b)) 45%,color-mix(in srgb,var(--hl-a) 25%,var(--hl-b)) 80%,var(--hl-b) 115%);box-shadow:0 40px 80px -50px color-mix(in srgb,var(--hl-b) 80%,transparent);}
+  .ad-hlwrap:before{content:'';position:absolute;inset:0;z-index:-1;background:radial-gradient(55% 45% at 88% 8%,color-mix(in srgb,var(--hl-b) 55%,transparent),transparent 70%),radial-gradient(45% 55% at 6% 96%,color-mix(in srgb,var(--hl-b) 45%,transparent),transparent 70%);}
+  .ad-hlwrap:after{content:'';position:absolute;inset:0;z-index:-1;background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27b%27%20x%3D%27-20%25%27%20y%3D%27-20%25%27%20width%3D%27140%25%27%20height%3D%27140%25%27%3E%3CfeGaussianBlur%20stdDeviation%3D%276%27/%3E%3C/filter%3E%3C/defs%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-linecap%3D%27round%27%20filter%3D%27url%28%23b%29%27%3E%3Cpath%20d%3D%27M-50%20700C150%20560%20260%20760%20430%20600S640%20300%20820%20380%201050%20640%201260%20420%27%20stroke-width%3D%2760%27%20stroke-opacity%3D%27.10%27/%3E%3Cpath%20d%3D%27M-50%20640C170%20520%20280%20700%20450%20560S660%20260%20840%20330%201060%20600%201260%20360%27%20stroke-width%3D%2718%27%20stroke-opacity%3D%27.22%27/%3E%3Cpath%20d%3D%27M-50%20760C190%20600%20300%20820%20480%20650S700%20360%20880%20440%201080%20700%201260%20500%27%20stroke-width%3D%278%27%20stroke-opacity%3D%27.28%27/%3E%3Cpath%20d%3D%27M-50%20220C140%20120%20300%20300%20480%20200S760%2040%20940%20140%201120%20260%201260%20120%27%20stroke-width%3D%2740%27%20stroke-opacity%3D%27.07%27/%3E%3Cpath%20d%3D%27M-50%20260C160%20160%20310%20330%20500%20230S780%2080%20960%20180%201130%20300%201260%20170%27%20stroke-width%3D%276%27%20stroke-opacity%3D%27.20%27/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat;mix-blend-mode:screen;opacity:.55;pointer-events:none;}
+  .ad-hlwrap h2.ad-h2{color:#fff;margin:44px 0 28px;text-shadow:0 2px 18px rgba(0,0,0,.35);}
+  .ad-hlwrap .ad-c{box-shadow:0 22px 44px -26px rgba(0,0,0,.75);}
+  .ad-hlwrap .ad-b2c{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px);}
+  .ad-hlwrap--steel{background:linear-gradient(118deg,color-mix(in srgb,var(--hl-a) 82%,#000) 0%,var(--hl-a) 26%,color-mix(in srgb,var(--hl-a) 55%,var(--hl-b)) 44%,color-mix(in srgb,var(--hl-b) 80%,#fff) 51%,color-mix(in srgb,var(--hl-a) 50%,var(--hl-b)) 58%,var(--hl-a) 76%,color-mix(in srgb,var(--hl-a) 80%,#000) 100%);border:1px solid color-mix(in srgb,var(--hl-b) 40%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--hl-b) 75%,transparent),inset 0 -1px 0 rgba(0,0,0,.4),0 40px 80px -50px color-mix(in srgb,var(--hl-a) 90%,transparent);}
+  .ad-hlwrap--steel:before{background:repeating-linear-gradient(118deg,rgba(255,255,255,.05) 0 1px,transparent 1px 7px),linear-gradient(90deg,transparent 8%,color-mix(in srgb,var(--hl-b) 90%,#fff) 50%,transparent 92%) top/100% 2px no-repeat,radial-gradient(35% 28% at 50% 0%,color-mix(in srgb,var(--hl-b) 45%,transparent),transparent 70%);}
+  .ad-hlwrap--steel:after{background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20600%20600%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-opacity%3D%27.55%27%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%27290%27%20stroke-width%3D%273%27%2F%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%27262%27%20stroke-width%3D%271.2%27%2F%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%27200%27%20stroke-width%3D%271%27%2F%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%2746%27%20stroke-width%3D%273%27%2F%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%2718%27%20stroke-width%3D%271.5%27%2F%3E%3Cg%20stroke-width%3D%271.2%27%3E%3Cpath%20d%3D%27M300%2046V254M300%20346V554M46%20300H254M346%20300H554M120%20120L267%20267M333%20333L480%20480M480%20120L333%20267M267%20333L120%20480%27%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E") no-repeat right -160px bottom -200px/680px 680px;opacity:.4;mix-blend-mode:normal;}
+  .ad-hlwrap--steel .ad-b2c{background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.04));border:1px solid color-mix(in srgb,var(--hl-b) 35%,transparent);}
+  .ad-hlwrap--wine{background:linear-gradient(160deg,var(--hl-a) 0%,var(--hl-b) 50%,color-mix(in srgb,var(--hl-a) 70%,#000) 100%);box-shadow:0 40px 80px -50px color-mix(in srgb,var(--hl-b) 90%,transparent);}
+  .ad-hlwrap--wine:before{background:none;}
+  .ad-hlwrap--wine:after{background:var(--hl-s,#ff1a3c);-webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27b%27%3E%3CfeGaussianBlur%20stdDeviation%3D%276%27/%3E%3C/filter%3E%3C/defs%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ff1a3c%27%20stroke-linecap%3D%27round%27%20filter%3D%27url%28%23b%29%27%3E%3Cpath%20d%3D%27M-50%20700C150%20560%20260%20760%20430%20600S640%20300%20820%20380%201050%20640%201260%20420%27%20stroke-width%3D%2760%27%20stroke-opacity%3D%270.32000000000000006%27/%3E%3Cpath%20d%3D%27M-50%20640C170%20520%20280%20700%20450%20560S660%20260%20840%20330%201060%20600%201260%20360%27%20stroke-width%3D%2718%27%20stroke-opacity%3D%270.7040000000000001%27/%3E%3Cpath%20d%3D%27M-50%20760C190%20600%20300%20820%20480%20650S700%20360%20880%20440%201080%20700%201260%20500%27%20stroke-width%3D%278%27%20stroke-opacity%3D%270.8960000000000001%27/%3E%3Cpath%20d%3D%27M-50%20220C140%20120%20300%20300%20480%20200S760%2040%20940%20140%201120%20260%201260%20120%27%20stroke-width%3D%2740%27%20stroke-opacity%3D%270.22400000000000003%27/%3E%3Cpath%20d%3D%27M-50%20260C160%20160%20310%20330%20500%20230S780%2080%20960%20180%201130%20300%201260%20170%27%20stroke-width%3D%276%27%20stroke-opacity%3D%270.6400000000000001%27/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat;mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27b%27%3E%3CfeGaussianBlur%20stdDeviation%3D%276%27/%3E%3C/filter%3E%3C/defs%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ff1a3c%27%20stroke-linecap%3D%27round%27%20filter%3D%27url%28%23b%29%27%3E%3Cpath%20d%3D%27M-50%20700C150%20560%20260%20760%20430%20600S640%20300%20820%20380%201050%20640%201260%20420%27%20stroke-width%3D%2760%27%20stroke-opacity%3D%270.32000000000000006%27/%3E%3Cpath%20d%3D%27M-50%20640C170%20520%20280%20700%20450%20560S660%20260%20840%20330%201060%20600%201260%20360%27%20stroke-width%3D%2718%27%20stroke-opacity%3D%270.7040000000000001%27/%3E%3Cpath%20d%3D%27M-50%20760C190%20600%20300%20820%20480%20650S700%20360%20880%20440%201080%20700%201260%20500%27%20stroke-width%3D%278%27%20stroke-opacity%3D%270.8960000000000001%27/%3E%3Cpath%20d%3D%27M-50%20220C140%20120%20300%20300%20480%20200S760%2040%20940%20140%201120%20260%201260%20120%27%20stroke-width%3D%2740%27%20stroke-opacity%3D%270.22400000000000003%27/%3E%3Cpath%20d%3D%27M-50%20260C160%20160%20310%20330%20500%20230S780%2080%20960%20180%201130%20300%201260%20170%27%20stroke-width%3D%276%27%20stroke-opacity%3D%270.6400000000000001%27/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat;opacity:.75;mix-blend-mode:screen;}
+  .ad-hlwrap--carbon{background:repeating-linear-gradient(45deg,rgba(0,0,0,.32) 0 1px,transparent 1px 5px),repeating-linear-gradient(135deg,rgba(255,255,255,.11) 0 1px,rgba(255,255,255,.04) 1px 3px,rgba(0,0,0,.55) 3px 5.5px,rgba(0,0,0,.2) 5.5px 6.5px),linear-gradient(160deg,color-mix(in srgb,var(--hl-b) 75%,var(--hl-a)) 0%,var(--hl-a) 45%,color-mix(in srgb,var(--hl-b) 55%,var(--hl-a)) 100%);border:1px solid rgba(255,255,255,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 40px 80px -45px rgba(0,0,0,.85);}
+  .ad-hlwrap--carbon:before{background:radial-gradient(60% 50% at 75% 30%,rgba(255,255,255,.2),transparent 70%),radial-gradient(40% 35% at 15% 85%,rgba(255,255,255,.06),transparent 70%);opacity:1;}
+  .ad-hlwrap--carbon:after{background:linear-gradient(120deg,transparent 25%,rgba(255,255,255,.07) 45%,transparent 65%);opacity:1;mix-blend-mode:screen;}
+  .ad-hlwrap--carbon .ad-b2c{background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(4px);}
+  .ad-hlwrap--carbon.ad-hlwrap--wine:after{background:var(--hl-s,#A7ADB5);-webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27b%27%3E%3CfeGaussianBlur%20stdDeviation%3D%276%27/%3E%3C/filter%3E%3C/defs%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ff1a3c%27%20stroke-linecap%3D%27round%27%20filter%3D%27url%28%23b%29%27%3E%3Cpath%20d%3D%27M-50%20700C150%20560%20260%20760%20430%20600S640%20300%20820%20380%201050%20640%201260%20420%27%20stroke-width%3D%2760%27%20stroke-opacity%3D%270.32000000000000006%27/%3E%3Cpath%20d%3D%27M-50%20640C170%20520%20280%20700%20450%20560S660%20260%20840%20330%201060%20600%201260%20360%27%20stroke-width%3D%2718%27%20stroke-opacity%3D%270.7040000000000001%27/%3E%3Cpath%20d%3D%27M-50%20760C190%20600%20300%20820%20480%20650S700%20360%20880%20440%201080%20700%201260%20500%27%20stroke-width%3D%278%27%20stroke-opacity%3D%270.8960000000000001%27/%3E%3Cpath%20d%3D%27M-50%20220C140%20120%20300%20300%20480%20200S760%2040%20940%20140%201120%20260%201260%20120%27%20stroke-width%3D%2740%27%20stroke-opacity%3D%270.22400000000000003%27/%3E%3Cpath%20d%3D%27M-50%20260C160%20160%20310%20330%20500%20230S780%2080%20960%20180%201130%20300%201260%20170%27%20stroke-width%3D%276%27%20stroke-opacity%3D%270.6400000000000001%27/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat;mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27b%27%3E%3CfeGaussianBlur%20stdDeviation%3D%276%27/%3E%3C/filter%3E%3C/defs%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23ff1a3c%27%20stroke-linecap%3D%27round%27%20filter%3D%27url%28%23b%29%27%3E%3Cpath%20d%3D%27M-50%20700C150%20560%20260%20760%20430%20600S640%20300%20820%20380%201050%20640%201260%20420%27%20stroke-width%3D%2760%27%20stroke-opacity%3D%270.32000000000000006%27/%3E%3Cpath%20d%3D%27M-50%20640C170%20520%20280%20700%20450%20560S660%20260%20840%20330%201060%20600%201260%20360%27%20stroke-width%3D%2718%27%20stroke-opacity%3D%270.7040000000000001%27/%3E%3Cpath%20d%3D%27M-50%20760C190%20600%20300%20820%20480%20650S700%20360%20880%20440%201080%20700%201260%20500%27%20stroke-width%3D%278%27%20stroke-opacity%3D%270.8960000000000001%27/%3E%3Cpath%20d%3D%27M-50%20220C140%20120%20300%20300%20480%20200S760%2040%20940%20140%201120%20260%201260%20120%27%20stroke-width%3D%2740%27%20stroke-opacity%3D%270.22400000000000003%27/%3E%3Cpath%20d%3D%27M-50%20260C160%20160%20310%20330%20500%20230S780%2080%20960%20180%201130%20300%201260%20170%27%20stroke-width%3D%276%27%20stroke-opacity%3D%270.6400000000000001%27/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat;opacity:.8;mix-blend-mode:screen;}
+  .ad-hlwrap--carbon.ad-hlwrap--steel:before{background:linear-gradient(118deg,transparent 36%,rgba(220,226,234,.10) 46%,rgba(235,240,246,.42) 51%,rgba(220,226,234,.10) 56%,transparent 66%),linear-gradient(90deg,transparent 8%,rgba(220,226,234,.7) 50%,transparent 92%) top/100% 2px no-repeat;opacity:1;}
+  .ad-hlwrap--carbon.ad-hlwrap--steel:after{background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20600%20600%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-opacity%3D%27.55%27%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%27290%27%20stroke-width%3D%273%27%2F%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%27262%27%20stroke-width%3D%271.2%27%2F%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%27200%27%20stroke-width%3D%271%27%2F%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%2746%27%20stroke-width%3D%273%27%2F%3E%3Ccircle%20cx%3D%27300%27%20cy%3D%27300%27%20r%3D%2718%27%20stroke-width%3D%271.5%27%2F%3E%3Cg%20stroke-width%3D%271.2%27%3E%3Cpath%20d%3D%27M300%2046V254M300%20346V554M46%20300H254M346%20300H554M120%20120L267%20267M333%20333L480%20480M480%20120L333%20267M267%20333L120%20480%27%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E") no-repeat right -160px bottom -200px/680px 680px;opacity:.45;mix-blend-mode:normal;-webkit-mask:none;mask:none;}
+  .ad-hlwrap--carbon.ad-hlwrap--waves:after{background:linear-gradient(160deg,#E6EAF0,#9AA2AD);-webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27b%27%20x%3D%27-20%25%27%20y%3D%27-20%25%27%20width%3D%27140%25%27%20height%3D%27140%25%27%3E%3CfeGaussianBlur%20stdDeviation%3D%276%27/%3E%3C/filter%3E%3C/defs%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-linecap%3D%27round%27%20filter%3D%27url%28%23b%29%27%3E%3Cpath%20d%3D%27M-50%20700C150%20560%20260%20760%20430%20600S640%20300%20820%20380%201050%20640%201260%20420%27%20stroke-width%3D%2760%27%20stroke-opacity%3D%27.10%27/%3E%3Cpath%20d%3D%27M-50%20640C170%20520%20280%20700%20450%20560S660%20260%20840%20330%201060%20600%201260%20360%27%20stroke-width%3D%2718%27%20stroke-opacity%3D%27.22%27/%3E%3Cpath%20d%3D%27M-50%20760C190%20600%20300%20820%20480%20650S700%20360%20880%20440%201080%20700%201260%20500%27%20stroke-width%3D%278%27%20stroke-opacity%3D%27.28%27/%3E%3Cpath%20d%3D%27M-50%20220C140%20120%20300%20300%20480%20200S760%2040%20940%20140%201120%20260%201260%20120%27%20stroke-width%3D%2740%27%20stroke-opacity%3D%27.07%27/%3E%3Cpath%20d%3D%27M-50%20260C160%20160%20310%20330%20500%20230S780%2080%20960%20180%201130%20300%201260%20170%27%20stroke-width%3D%276%27%20stroke-opacity%3D%27.20%27/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat;mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27b%27%20x%3D%27-20%25%27%20y%3D%27-20%25%27%20width%3D%27140%25%27%20height%3D%27140%25%27%3E%3CfeGaussianBlur%20stdDeviation%3D%276%27/%3E%3C/filter%3E%3C/defs%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-linecap%3D%27round%27%20filter%3D%27url%28%23b%29%27%3E%3Cpath%20d%3D%27M-50%20700C150%20560%20260%20760%20430%20600S640%20300%20820%20380%201050%20640%201260%20420%27%20stroke-width%3D%2760%27%20stroke-opacity%3D%27.10%27/%3E%3Cpath%20d%3D%27M-50%20640C170%20520%20280%20700%20450%20560S660%20260%20840%20330%201060%20600%201260%20360%27%20stroke-width%3D%2718%27%20stroke-opacity%3D%27.22%27/%3E%3Cpath%20d%3D%27M-50%20760C190%20600%20300%20820%20480%20650S700%20360%20880%20440%201080%20700%201260%20500%27%20stroke-width%3D%278%27%20stroke-opacity%3D%27.28%27/%3E%3Cpath%20d%3D%27M-50%20220C140%20120%20300%20300%20480%20200S760%2040%20940%20140%201120%20260%201260%20120%27%20stroke-width%3D%2740%27%20stroke-opacity%3D%27.07%27/%3E%3Cpath%20d%3D%27M-50%20260C160%20160%20310%20330%20500%20230S780%2080%20960%20180%201130%20300%201260%20170%27%20stroke-width%3D%276%27%20stroke-opacity%3D%27.20%27/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat;opacity:1;mix-blend-mode:screen;}
+  .ad-hlwrap--carbon.ad-hlwrap--waves:before{background:radial-gradient(50% 40% at 50% 0%,rgba(255,255,255,.14),transparent 70%),radial-gradient(45% 50% at 0% 100%,rgba(255,255,255,.07),transparent 70%);opacity:1;}
+  .ad-hlwrap--hex{background:linear-gradient(135deg,var(--hl-a) 0%,color-mix(in srgb,var(--hl-a) 45%,var(--hl-b)) 55%,var(--hl-b) 100%);border:1px solid rgba(120,200,255,.25);box-shadow:inset 0 1px 0 rgba(150,215,255,.35),0 40px 80px -45px color-mix(in srgb,var(--hl-b) 80%,transparent);}
+  .ad-hlwrap--hex:before{background:radial-gradient(45% 45% at 88% 18%,rgba(60,170,255,.35),transparent 70%),radial-gradient(40% 45% at 5% 95%,rgba(60,170,255,.22),transparent 70%);opacity:1;}
+  .ad-hlwrap--hex:after{background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27g%27%20x%3D%27-20%25%27%20y%3D%27-20%25%27%20width%3D%27140%25%27%20height%3D%27140%25%27%3E%3CfeGaussianBlur%20stdDeviation%3D%277%27%2F%3E%3C%2Ffilter%3E%3C%2Fdefs%3E%3Cg%20fill%3D%27none%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M1305%20270%20L1080%20400%20L855%20270%20L855%2010%20L1080%20-120%20L1305%2010Z%20M1353%20660%20L1180%20760%20L1007%20660%20L1007%20460%20L1180%20360%20L1353%20460Z%20M967%2025%20L820%20110%20L673%2025%20L673%20-145%20L820%20-230%20L967%20-145Z%20M259%20935%20L60%201050%20L-139%20935%20L-139%20705%20L60%20590%20L259%20705Z%20M90%20495%20L-40%20570%20L-170%20495%20L-170%20345%20L-40%20270%20L90%20345Z%20M716%201070%20L560%201160%20L404%201070%20L404%20890%20L560%20800%20L716%20890Z%27%20stroke%3D%27%2329a8ff%27%20stroke-width%3D%2710%27%20stroke-opacity%3D%27.55%27%20filter%3D%27url%28%23g%29%27%2F%3E%3Cpath%20d%3D%27M1305%20270%20L1080%20400%20L855%20270%20L855%2010%20L1080%20-120%20L1305%2010Z%20M1353%20660%20L1180%20760%20L1007%20660%20L1007%20460%20L1180%20360%20L1353%20460Z%20M967%2025%20L820%20110%20L673%2025%20L673%20-145%20L820%20-230%20L967%20-145Z%20M259%20935%20L60%201050%20L-139%20935%20L-139%20705%20L60%20590%20L259%20705Z%20M90%20495%20L-40%20570%20L-170%20495%20L-170%20345%20L-40%20270%20L90%20345Z%20M716%201070%20L560%201160%20L404%201070%20L404%20890%20L560%20800%20L716%20890Z%27%20stroke%3D%27%238fd6ff%27%20stroke-width%3D%272.2%27%20stroke-opacity%3D%27.9%27%2F%3E%3C%2Fg%3E%3Cg%20fill%3D%27%233fb4ff%27%20fill-opacity%3D%27.06%27%3E%3Cpath%20d%3D%27M1305%20270%20L1080%20400%20L855%20270%20L855%2010%20L1080%20-120%20L1305%2010Z%27%2F%3E%3Cpath%20d%3D%27M259%20935%20L60%201050%20L-139%20935%20L-139%20705%20L60%20590%20L259%20705Z%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") center/cover no-repeat;opacity:.9;mix-blend-mode:screen;}
+  .ad-hlwrap--hex .ad-b2c{background:rgba(3,22,52,.35);border:1px solid rgba(120,200,255,.25);}
+  .ad-hlwrap--ribbon{background:radial-gradient(80% 70% at 50% 40%,color-mix(in srgb,var(--hl-b) 35%,var(--hl-a)),var(--hl-a) 75%);border:1px solid rgba(60,120,255,.22);box-shadow:inset 0 1px 0 rgba(90,150,255,.3),0 40px 80px -45px rgba(20,70,255,.55);}
+  .ad-hlwrap--ribbon:before{background:none;}
+  .ad-hlwrap--ribbon:after{background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201200%20900%27%20preserveAspectRatio%3D%27none%27%3E%3Cdefs%3E%3Cfilter%20id%3D%27b%27%20x%3D%27-10%25%27%20y%3D%27-10%25%27%20width%3D%27120%25%27%20height%3D%27120%25%27%3E%3CfeGaussianBlur%20stdDeviation%3D%2718%27%2F%3E%3C%2Ffilter%3E%3Cfilter%20id%3D%27g%27%20x%3D%27-10%25%27%20y%3D%27-10%25%27%20width%3D%27120%25%27%20height%3D%27120%25%27%3E%3CfeGaussianBlur%20stdDeviation%3D%274%27%2F%3E%3C%2Ffilter%3E%3ClinearGradient%20id%3D%27r1%27%20x1%3D%270%27%20y1%3D%270%27%20x2%3D%270%27%20y2%3D%271%27%3E%3Cstop%20offset%3D%270%27%20stop-color%3D%27%230a2fd6%27%20stop-opacity%3D%270%27%2F%3E%3Cstop%20offset%3D%27.75%27%20stop-color%3D%27%231446ff%27%20stop-opacity%3D%27.75%27%2F%3E%3Cstop%20offset%3D%271%27%20stop-color%3D%27%233d7bff%27%20stop-opacity%3D%27.95%27%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%27r2%27%20x1%3D%270%27%20y1%3D%270%27%20x2%3D%271%27%20y2%3D%271%27%3E%3Cstop%20offset%3D%270%27%20stop-color%3D%27%231a4dff%27%20stop-opacity%3D%27.7%27%2F%3E%3Cstop%20offset%3D%271%27%20stop-color%3D%27%230a1f8f%27%20stop-opacity%3D%270%27%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cpath%20d%3D%27M-50%20330C180%20420%20330%20760%20600%20760S1000%20380%201250%20200L1250%20-50L-50%20-50Z%27%20fill%3D%27url%28%23r1%29%27%20filter%3D%27url%28%23b%29%27%20opacity%3D%27.85%27%2F%3E%3Cpath%20d%3D%27M-50%20330C180%20420%20330%20760%20600%20760S1000%20380%201250%20200%27%20fill%3D%27none%27%20stroke%3D%27%232f74ff%27%20stroke-width%3D%2714%27%20filter%3D%27url%28%23g%29%27%20opacity%3D%27.9%27%2F%3E%3Cpath%20d%3D%27M-50%20330C180%20420%20330%20760%20600%20760S1000%20380%201250%20200%27%20fill%3D%27none%27%20stroke%3D%27%239cc2ff%27%20stroke-width%3D%272.5%27%20opacity%3D%27.9%27%2F%3E%3Cpath%20d%3D%27M200%20-50C420%20120%20560%20140%20760%20320S1060%20560%201250%20520L1250%20-50Z%27%20fill%3D%27url%28%23r2%29%27%20filter%3D%27url%28%23b%29%27%20opacity%3D%27.55%27%2F%3E%3Cpath%20d%3D%27M200%20-50C420%20120%20560%20140%20760%20320S1060%20560%201250%20520%27%20fill%3D%27none%27%20stroke%3D%27%233a7dff%27%20stroke-width%3D%278%27%20filter%3D%27url%28%23g%29%27%20opacity%3D%27.6%27%2F%3E%3Cpath%20d%3D%27M-50%20520C160%20560%20300%20900%20520%20960%27%20fill%3D%27none%27%20stroke%3D%27%232a63ff%27%20stroke-width%3D%276%27%20filter%3D%27url%28%23g%29%27%20opacity%3D%27.45%27%2F%3E%3C%2Fsvg%3E") center/100% 100% no-repeat;opacity:1;mix-blend-mode:screen;}
+  .ad-hlwrap--ribbon .ad-b2c{background:rgba(0,0,0,.3);border:1px solid rgba(80,140,255,.22);}
+  .ad-hlwrap--flute{background:repeating-linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.10) 9px,rgba(255,255,255,.03) 16px,rgba(0,0,0,.55) 22px,rgba(0,0,0,.2) 24px),linear-gradient(90deg,var(--hl-a) 0%,var(--hl-a) 22%,color-mix(in srgb,var(--hl-a) 55%,var(--hl-b)) 62%,var(--hl-b) 100%);border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 40px 80px -45px rgba(0,0,0,.8);}
+  .ad-hlwrap--flute:before{background:linear-gradient(90deg,var(--hl-a) 0%,color-mix(in srgb,var(--hl-a) 85%,transparent) 15%,transparent 45%),radial-gradient(45% 70% at 92% 20%,rgba(255,255,255,.14),transparent 70%);opacity:1;}
+  .ad-hlwrap--flute:after{background:linear-gradient(180deg,rgba(0,0,0,.25),transparent 25%,transparent 75%,rgba(0,0,0,.35));opacity:1;mix-blend-mode:normal;}
+  .ad-hlwrap--flute .ad-b2c{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(6px);}
+  @media(max-width:860px){.ad-hlwrap{padding:4px 14px 18px;border-radius:24px;}.ad-hlwrap h2.ad-h2{margin:32px 0 20px;}}
+  .ad-c.ad-bigfull{min-height:440px;}.ad-b2c .ad-c.ad-img{min-height:330px;}.ad-b2c .ad-c.ad-img img{position:absolute;inset:0;height:100% !important;}.ad-c.ad-bigfull img{position:absolute;inset:0;}
+  @media(max-width:860px){.ad-c.ad-bigfull{min-height:0;aspect-ratio:4/5;}}
+  .ad-c.ad-img{padding:0;background:#fff;}
+  .ad-c.ad-img img{display:block;width:100% !important;height:100% !important;margin:0 !important;object-fit:cover;}
+  .ad-s3.ad-img{aspect-ratio:395/222;}.ad-s2.ad-img{aspect-ratio:259/244;}
+  .ad-c.ad-media{padding:0;aspect-ratio:374/481;background:#0F1E36;min-height:0;}
+  .ad-mv{position:absolute;inset:0;opacity:0;transition:opacity .6s ease;}
+  .ad-mv.on{opacity:1;}
+  .ad-mv video,.ad-mv img{display:block;width:100%;height:100%;object-fit:cover;margin:0;}
+  .ad-mdots{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:center;gap:8px;z-index:2;}
+  .ad-mdots button{width:8px;height:8px;padding:0;border:0;border-radius:99px;background:rgba(255,255,255,.55);box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer;transition:width .3s,background .3s;}
+  .ad-mdots button.on{width:24px;background:#fff;}
+  .ad-msound{position:absolute;right:12px;top:12px;z-index:2;display:grid;place-items:center;width:38px;height:38px;border:0;border-radius:50%;background:rgba(15,30,54,.55);color:#fff;cursor:pointer;backdrop-filter:blur(4px);}
+  .ad-msound svg{width:18px;height:18px;}.ad-msound .ad-msound__on{display:none;}
+  .ad-msound.is-on .ad-msound__on{display:block;}.ad-msound.is-on .ad-msound__off{display:none;}
+  .ad-b2c{margin-top:26px;background:var(--card);border-radius:20px;padding:16px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  .ad-b2c .ad-c{background:#fff;padding:16px 18px;min-height:330px;}.ad-b2c h3{font-size:19px;font-weight:600;}.ad-b2c p{font-size:12px;margin-top:4px;}
+  .ad-b2c img{height:230px;object-fit:contain;position:absolute;left:0;bottom:0;width:100%;}
+  .ad-b2c .bleed{padding:0;}.ad-b2c .bleed img{height:100%;object-fit:cover;}
+  .ad-kg{font-size:22px;color:var(--navy);font-weight:700;margin-top:10px;}
+  .ad-acc{margin-top:24px;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden;}
+  .ad-acc details + details{border-top:1px solid var(--line);}
+  .ad-acc summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;padding:16px 18px;font-size:15px;font-weight:700;color:var(--ink);transition:background .2s;}
+  .ad-acc summary::-webkit-details-marker{display:none;}
+  .ad-acc summary:hover{background:var(--soft);}
+  .ad-acc summary::after{content:'';width:9px;height:9px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:translateY(-3px) rotate(45deg);transition:transform .25s;flex-shrink:0;margin-right:4px;}
+  .ad-acc details[open] summary::after{transform:translateY(2px) rotate(-135deg);}
+  .ad-acc__body{padding:0 18px 18px;font-size:14px;line-height:1.75;color:#3F4A5E;}
+  .ad-acc__body{max-height:420px;overflow-y:auto;}
+  .ad-acc__body h3{font-size:15px;color:var(--ink);margin:16px 0 6px;}
+  .ad-acc__body ul,.ad-acc__body ol{padding-left:20px;margin:8px 0;}
+  .ad-acc__body a{color:var(--navy);font-weight:600;}
+  .ad-spec{display:grid;grid-template-columns:40% 60%;padding:.6rem 0;border-bottom:1px solid #EEF2F8;}
+  .ad-spec:last-child{border-bottom:0;}
+  .ad-spec b{color:var(--ink);}
+  .ad-manual{display:inline-flex;align-items:center;gap:8px;margin-top:6px;padding:10px 18px;border-radius:999px;background:var(--navy);color:#fff !important;text-decoration:none;font-weight:700;}
+  @media(max-width:990px){.ad-top{grid-template-columns:1fr;gap:28px;}.ad-gal{position:static;}}
+  @media(max-width:860px){.ad-hl{grid-template-columns:1fr;}.ad-b2c{grid-template-columns:1fr 1fr;}.ad-fs{grid-template-columns:1fr 1fr;gap:22px 0;}.ad-fs > div:nth-child(odd){border-left:0;}.ad-fs > div:last-child{grid-column:1 / -1;}.ad-g6{grid-template-columns:1fr 1fr;}.ad-s3,.ad-s2{grid-column:auto;}.ad-s6{grid-column:1 / -1;}.ad-gal{grid-template-columns:minmax(0,1fr);gap:12px;}.ad-thw{order:2;height:auto;flex-direction:row;}.ad-th{flex-direction:row;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;}.ad .ad-t{width:68px;height:68px;}.ad .ad-tnav{display:none;}.ad-stage{height:auto;aspect-ratio:1/1;}.ad .ad-arr{width:36px;height:36px;font-size:19px;}.ad .ad-a1{left:10px;}.ad .ad-a2{right:10px;}}
+  @media(max-width:480px){.ad-alt{grid-template-columns:1fr;}.ad .ad-btn{font-size:14px;}.ad-hl4{grid-template-columns:1fr;}.ad-acc summary{padding:15px 16px;}.ad-acc__body{padding:0 16px 16px;}}
+{% endstyle %}
+
+<div class='ad'>
+  <nav class='ad-crumb' aria-label='Breadcrumb'><a href='/'>Home</a><span>/</span>{% if product.collections.first %}<a href='{{ product.collections.first.url }}'>{{ product.collections.first.title }}</a><span>/</span>{% endif %}{{ product.title }}</nav>
+
+  <section class='ad-top'>
+    <div class='ad-gal{% if isz < 2 %} ad-gal--one{% endif %}'>
+      {% if isz > 1 %}
+        <div class='ad-thw'>
+          <button type='button' class='ad-tnav ad-tup' aria-label='Previous photos' hidden><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 15 6-6 6 6'/></svg></button>
+          <div class='ad-th' id='adth-{{ section.id }}'>
+            {% for image in product.images %}<button type='button' class='ad-t{% if forloop.first %} on{% endif %}' data-i='{{ forloop.index0 }}' aria-label='Show image {{ forloop.index }}'><img src='{{ image | image_url: width: 180 }}' alt='' loading='lazy' width='84' height='84'></button>{% endfor %}
+          </div>
+          <button type='button' class='ad-tnav ad-tdn' aria-label='More photos' hidden><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg></button>
+        </div>
+      {% endif %}
+      <div class='ad-stage' id='admain-{{ section.id }}'>
+        {% if isz > 1 %}<button type='button' class='ad-arr ad-a1' aria-label='Previous image'>&#8249;</button>{% endif %}
+        <div class='ad-track'>
+          {% for image in product.images %}<div class='ad-slide'><img src='{{ image | image_url: width: 1000 }}' alt='{{ image.alt | escape }}'{% unless forloop.first %} loading='lazy'{% endunless %} draggable='false'></div>{% endfor %}
+        </div>
+        {% if isz > 1 %}<button type='button' class='ad-arr ad-a2' aria-label='Next image'>&#8250;</button><div class='ad-count'><span>1</span> / {{ isz }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div>
+      <div class='ad-rate'>{%- for block in section.blocks -%}{%- if block.type == '@app' -%}{% render block %}{%- endif -%}{%- endfor -%}</div>
+      {%- assign ad_model = product.metafields.pulse.model_name.value -%}
+      {% if ad_model == blank %}{% if product.collections.first %}<a class='ad-eyebrow' href='{{ product.collections.first.url }}'>{{ product.collections.first.title }}</a>{% endif %}{% endif %}
+      <div class='ad-titlerow'>
+        {% if ad_model != blank %}<h1 class='ad-h1'><span class='ad-eyebrow ad-eyebrow--name'>{{ product.title }}</span>{{ ad_model }}</h1>{% else %}<h1 class='ad-h1'>{{ product.title }}</h1>{% endif %}
+        {% render 'pulse-share', product: product, id: section.id %}
+      </div>
+      <p class='ad-sub'>{{ summary }}</p>
+
+      <div class='ad-pricebox'>
+        <div class='ad-price'>
+          <b>₹{% render 'pulse-inr', cents: product.price %}</b>
+          {% if has_discount %}<s>₹{% render 'pulse-inr', cents: product.compare_at_price %}</s><span class='ad-off'>{{ off_pct }}% OFF</span>{% endif %}
+        </div>
+        <div class='ad-tax'>Inclusive of all taxes{% if has_discount %} &middot; <span class='ad-save'>You save ₹{% render 'pulse-inr', cents: diff %}</span>{% endif %}</div>
+        <div class='ad-emi'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='5' width='20' height='14' rx='2'/><path d='M2 10h20M6 15h4'/></svg>Easy EMI options available</div>
+      </div>
+
+      {% form 'product', product, id: 'ad-form', data-pulse-atc: '' %}
+        <input type='hidden' name='id' value='{{ ad_variant.id }}'>
+        <input type='hidden' name='quantity' value='1'>
+        <div class='ad-btns'>
+          {% if product.available %}
+            <button type='submit' name='add' class='ad-btn ad-btn--ghost'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/><path d='M3 6h18'/><path d='M16 10a4 4 0 0 1-8 0'/></svg>Add to Cart</button>
+            <a class='ad-btn ad-btn--primary' href='/cart/{{ ad_variant.id }}:1'>Buy Now<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12h14M13 5l7 7-7 7'/></svg></a>
+          {% else %}
+            <button type='button' class='ad-btn ad-btn--ghost' disabled>Sold out</button>
+            <button type='button' class='ad-btn ad-btn--primary' disabled>Unavailable</button>
+          {% endif %}
+        </div>
+      {% endform %}
+      <div class='ad-alt'>
+        <a class='ad-wa' target='_blank' rel='noopener' href='https://wa.me/{{ section.settings.whatsapp_number }}?text={{ 'Hi Pulse, I would like a live demo of the ' | append: product.title | url_encode }}' aria-label='Book a live demo on WhatsApp'>{% render 'pulse-wa-icon' %}Live Demo</a>
+        <a class='ad-tel' href='tel:+{{ ad_phone }}'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.8.7a2 2 0 0 1 1.7 2z'/></svg>Call {{ ad_phone_label }}</a>
+      </div>
+
+      <ul class='ad-hl4'>
+        <li>
+          <i><svg viewBox='0 0 40 40' aria-hidden='true'><rect x='5' y='11' width='26' height='18' rx='4' fill='#1B355E'/><rect x='32' y='16' width='3.5' height='8' rx='1.5' fill='#1B355E'/><rect x='8.5' y='14.5' width='5' height='11' rx='1.5' fill='#8FB3E8'/><rect x='15.5' y='14.5' width='5' height='11' rx='1.5' fill='#8FB3E8'/><rect x='22.5' y='14.5' width='5' height='11' rx='1.5' fill='#8FB3E8' opacity='.55'/></svg></i>
+          <span>Built-in <b>Rechargeable Battery</b></span>
+        </li>
+        <li>
+          <i><svg viewBox='0 0 40 40' aria-hidden='true'><circle cx='20' cy='21' r='13' fill='#1B355E'/><circle cx='20' cy='21' r='4.5' fill='#fff'/><circle cx='20' cy='12.5' r='1.6' fill='#8FB3E8'/><circle cx='28.5' cy='21' r='1.6' fill='#8FB3E8'/><circle cx='20' cy='29.5' r='1.6' fill='#8FB3E8'/><circle cx='11.5' cy='21' r='1.6' fill='#8FB3E8'/><path d='M9 10.5a15 15 0 0 1 8-4.5' stroke='#EE8B1B' stroke-width='3' stroke-linecap='round' fill='none'/></svg></i>
+          <span>Safety with <b>Electromagnetic Brakes</b></span>
+        </li>
+        <li>
+          <i><svg viewBox='0 0 40 40' aria-hidden='true'><path d='M7 24c0-2.5 3-4 6-4h14c3 0 6 1.5 6 4v1.5c0 1.4-1.1 2.5-2.5 2.5h-21A2.5 2.5 0 0 1 7 25.5V24z' fill='#8FB3E8'/><rect x='17.5' y='12' width='5' height='10' rx='2' fill='#1B355E'/><circle cx='20' cy='10.5' r='4.5' fill='#1B355E'/></svg></i>
+          <span>Easy Control for <b>Smooth Rides</b></span>
+        </li>
+        <li>
+          <i><svg viewBox='0 0 40 40' aria-hidden='true'><path d='M24.5 9.5a5 5 0 0 0-6 6.4L11 23.4a2.3 2.3 0 0 0 3.3 3.3l7.5-7.5a5 5 0 0 0 6.4-6l-3 3-3-.8-.8-3 3.1-3z' fill='#1B355E'/><circle cx='20' cy='20' r='14' fill='none' stroke='#8FB3E8' stroke-width='2.5'/><path d='M10.5 10.5l19 19' stroke='#8FB3E8' stroke-width='2.5' stroke-linecap='round'/></svg></i>
+          <span><b>Foldable</b> for Easy Storage</span>
+        </li>
+      </ul>
+
+
+      <div class='ad-del'>
+        <label for='adpin-{{ section.id }}'>Check delivery to your pincode</label>
+        <div class='ad-delr'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z'/><circle cx='12' cy='10' r='2.5'/></svg><input type='text' inputmode='numeric' maxlength='6' placeholder='Enter 6-digit pincode' id='adpin-{{ section.id }}'><button type='button' id='adpinb-{{ section.id }}'>Check</button></div>
+        <p class='ad-delmsg' id='adpinmsg-{{ section.id }}' hidden></p>
+      </div>
+
+      <div class='ad-acc'>
+      <details>
+        <summary>Description</summary>
+        <div class='ad-acc__body'>{{ desc_html }}</div>
+      </details>
+      <details>
+        <summary>Warranty</summary>
+        <div class='ad-acc__body'>
+          {%- if warranty_page != blank and warranty_page.content != blank -%}
+            {{ warranty_page.content }}
+            <p><a href='{{ warranty_page.url }}'>Read the full warranty policy</a></p>
+          {%- else -%}
+            <p>Every Pulse wheelchair is covered by a 1-year warranty against manufacturing defects.</p>
+          {%- endif -%}
+        </div>
+      </details>
+      <details>
+        <summary>Product Details</summary>
+        <div class='ad-acc__body'>
+          {%- assign spec_count = 0 -%}
+          {%- for item in spec_items -%}{%- assign line = item | strip_html | strip -%}{%- if line contains ':' -%}{%- assign key = line | split: ':' | first | strip -%}{%- unless shown_keys contains key -%}{%- assign spec_count = spec_count | plus: 1 -%}{%- assign val = line | remove_first: key | remove_first: ':' | strip -%}<div class='ad-spec'><b>{{ key }}</b><span>{{ val }}</span></div>{%- endunless -%}{%- endif -%}{%- endfor -%}
+          {%- if spec_count == 0 -%}<p>Detailed specifications for this model are available on request. <a href='tel:+{{ ad_phone }}'>Call {{ ad_phone_label }}</a>.</p>{%- endif -%}
+        </div>
+      </details>
+      <details>
+        <summary>Return and Refund</summary>
+        <div class='ad-acc__body'>
+          {%- if returns_page != blank and returns_page.content != blank -%}
+            {{ returns_page.content }}
+            <p><a href='{{ returns_page.url }}'>Read the full return and refund policy</a></p>
+          {%- else -%}
+            <p>For returns or refunds, please contact our support team on <a href='tel:+{{ ad_phone }}'>{{ ad_phone_label }}</a>.</p>
+          {%- endif -%}
+        </div>
+      </details>
+      <details>
+        <summary>Owner&rsquo;s Manual</summary>
+        <div class='ad-acc__body'>
+          {%- if manual_file != blank -%}
+            <p>Download the owner&rsquo;s manual for the {{ product.title }}.</p>
+            <a class='ad-manual' href='{{ manual_file.url }}' target='_blank' rel='noopener'><svg viewBox='0 0 24 24' width='16' height='16' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v12M7 10l5 5 5-5M5 21h14'/></svg>Download manual (PDF)</a>
+          {%- else -%}
+            {{ section.settings.manual_html }}
+          {%- endif -%}
+        </div>
+      </details>
+      </div>
+    </div>
+  </section>
+
+  {%- liquid
+    # Brochure icons for this model (product metafield pulse.badges), topped up to 5 with capacity and warranty.
+    assign fs_badges = product.metafields.pulse.badges.value
+    assign fs_list = ''
+    if fs_badges != blank
+      assign fs_list = fs_badges | join: '|~|'
+      assign fs_n = fs_badges.size
+      assign fs_has_load = false
+      for b in fs_badges
+        if b contains 'Support'
+          assign fs_has_load = true
+        endif
+      endfor
+      if fs_n < 5 and fs_has_load == false and spec_load != blank
+        assign fs_list = fs_list | append: '|~|Supports up to ' | append: spec_load
+        assign fs_n = fs_n | plus: 1
+      endif
+      if fs_n < 5
+        assign fs_list = fs_list | append: '|~|1 Year Warranty'
+      endif
+    endif
+    assign fs_items = fs_list | split: '|~|'
+  -%}
+  {%- if fs_items.size > 0 -%}
+  <div class='ad-fs'>
+    {%- for b in fs_items -%}
+      {%- liquid
+        assign bl = b | downcase
+        assign fs_big = b
+        assign fs_small = ''
+        if bl contains 'iata'
+          assign fs_big = 'IATA'
+          assign fs_small = 'Compliant'
+        elsif bl contains 'top speed'
+          assign fs_big = b | remove: 'Top Speed' | strip
+          assign fs_small = 'Top speed'
+        elsif bl contains 'range'
+          assign fs_big = b | remove: 'Range' | strip
+          assign fs_small = 'Range per charge'
+        elsif bl contains 'support'
+          assign fs_big = b | remove: 'Supports up to' | strip
+          assign fs_small = 'Weight capacity'
+        elsif bl contains 'warranty'
+          assign fs_big = b | remove: 'Warranty' | strip
+          assign fs_small = 'Warranty'
+        elsif bl contains 'recline'
+          assign fs_big = b | remove: 'Recline' | strip
+          assign fs_small = 'Recline'
+        elsif bl contains 'remote'
+          assign fs_big = 'Fully Remote'
+          assign fs_small = 'Control'
+        elsif bl contains 'heavy'
+          assign fs_big = 'Heavy-Duty'
+          assign fs_small = 'Frame'
+        elsif bl contains 'compact'
+          assign fs_big = 'Compact'
+          assign fs_small = 'Fold'
+        elsif bl contains 'travel'
+          assign fs_big = 'Easy Travel'
+          assign fs_small = 'Chair'
+        elsif bl contains 'light'
+          assign fs_big = 'Lightweight'
+          assign fs_small = 'Wheelchair'
+        endif
+      -%}
+      <div><i>{% render 'pulse-badge-icon', label: b %}</i>{{ fs_big }}{% if fs_small != blank %}<small>{{ fs_small }}</small>{% endif %}</div>
+    {%- endfor -%}
+  </div>
+  {%- else -%}
+  <div class='ad-fs'>
+      <div><i><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z'/><circle cx='12' cy='10' r='2.5'/></svg></i>{% if spec_range != blank %}{{ spec_range }}{% else %}Long Range{% endif %}<small>Range per charge</small></div>
+      <div><i><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M6.5 8h11l2.5 12H4L6.5 8z'/><circle cx='12' cy='5' r='2'/></svg></i>{% if spec_load != blank %}{{ spec_load }}{% else %}Heavy Duty{% endif %}<small>Weight capacity</small></div>
+      <div><i><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='1' y='3' width='15' height='13' rx='1'/><path d='M16 8h4l3 5v3h-7V8z'/><circle cx='5.5' cy='18.5' r='2.5'/><circle cx='18.5' cy='18.5' r='2.5'/></svg></i>Free Express<small>Delivery*</small></div>
+      <div><i><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/><path d='m9 12 2 2 4-4'/></svg></i>1 Year<small>Warranty</small></div>
+      {%- if product.tags contains 'IATA Compliant' -%}
+      <div><i><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z'/></svg></i>IATA<small>Compliant</small></div>
+      {%- else -%}
+      <div><i><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='3'/><path d='M3 9h18M9 21V9'/></svg></i>{% if spec_frame != blank %}{{ spec_frame }}{% else %}Sturdy{% endif %}<small>Frame</small></div>
+      {%- endif -%}
+  </div>
+  {%- endif -%}
+
+  {%- liquid
+    # Optional backdrop behind Quick Product Highlights, in this wheelchair's colours.
+    # Product metafield pulse.hl_colors = "dark,accent[,style]" e.g. "#02060E,#C50337" or "#011C40,#C3CAD3,steel" or "#1a0208,#3d0614,wine,#ff1a3c" (4th = smoke colour). Leave empty for the plain white look.
+    assign hl_cols = product.metafields.pulse.hl_colors.value | default: '' | remove: ' ' | split: ','
+  -%}
+  {%- if hl_cols.size >= 2 -%}<div class='ad-hlwrap{% if hl_cols[2] != blank %}{% assign hl_st = hl_cols[2] | split: '+' %}{% for x in hl_st %} ad-hlwrap--{{ x | handleize }}{% endfor %}{% endif %}' style='--hl-a:{{ hl_cols[0] | escape }};--hl-b:{{ hl_cols[1] | escape }};{% if hl_cols[3] != blank %}--hl-s:{{ hl_cols[3] | escape }};{% endif %}'>{%- endif -%}
+  <h2 class='ad-h2'>Quick Product Highlights</h2>
+  {%- assign hl_big = product.metafields.pulse.hl_big_media.value -%}
+  <section class='ad-hl'>
+    {%- if hl_big != blank and hl_big.size > 0 -%}
+    <div class='ad-c ad-big ad-media' id='adhv-{{ section.id }}'>
+      {%- for m in hl_big -%}
+      <div class='ad-mv{% if forloop.first %} on{% endif %}'>
+        {%- if m.media_type == 'video' -%}
+          {{ m | video_tag: muted: true, playsinline: true, preload: 'metadata', image_size: '900x', class: 'ad-mv__el' }}
+        {%- else -%}
+          {{ m | image_url: width: 900 | image_tag: loading: 'lazy', class: 'ad-mv__el', alt: product.title }}
+        {%- endif -%}
+      </div>
+      {%- endfor -%}
+      {%- if hl_big.size > 1 -%}
+      <div class='ad-mdots'>{%- for m in hl_big -%}<button type='button' aria-label='Show {{ forloop.index }} of {{ hl_big.size }}'{% if forloop.first %} class='on'{% endif %}></button>{%- endfor -%}</div>
+      {%- endif -%}
+      <button type='button' class='ad-msound' aria-label='Turn sound on' hidden><svg class='ad-msound__off' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M11 5 6 9H2v6h4l5 4z'/><path d='m23 9-6 6M17 9l6 6'/></svg><svg class='ad-msound__on' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M11 5 6 9H2v6h4l5 4z'/><path d='M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14'/></svg></button>
+    </div>
+    {%- else -%}
+    <div class='ad-c ad-big ad-img ad-bigfull'>
+      {% if isz > 0 %}{% assign bi = 1 | modulo: isz %}<img src='{{ product.images[bi] | image_url: width: 1000 }}' alt='{{ product.images[bi].alt | default: product.title | escape }}' loading='lazy'>{% endif %}
+    </div>
+    {%- endif -%}
+    <div class='ad-g6'>
+      {%- if product.metafields.pulse.hl_1.value != blank -%}
+      <div class='ad-c ad-s3 ad-img'>{{ product.metafields.pulse.hl_1.value | image_url: width: 900 | image_tag: loading: 'lazy', alt: 'Joystick control', sizes: '(max-width: 860px) 50vw, 420px' }}</div>
+      {%- else -%}
+      <div class='ad-c ad-s3 ad-img'>{% if section.settings.closeup_joystick != blank %}{{ section.settings.closeup_joystick | image_url: width: 900 | image_tag: loading: 'lazy', alt: 'Joystick controller close-up' }}{% else %}<img src='{{ 'pulse-closeup-joystick.jpg' | asset_url }}' alt='Joystick controller close-up' loading='lazy'>{% endif %}</div>
+      {%- endif -%}
+      {%- if product.metafields.pulse.hl_2.value != blank -%}
+      <div class='ad-c ad-s3 ad-img'>{{ product.metafields.pulse.hl_2.value | image_url: width: 900 | image_tag: loading: 'lazy', alt: 'Comfort seat', sizes: '(max-width: 860px) 50vw, 420px' }}</div>
+      {%- else -%}
+      <div class='ad-c ad-s3 ad-img'>{% if section.settings.closeup_seat != blank %}{{ section.settings.closeup_seat | image_url: width: 900 | image_tag: loading: 'lazy', alt: 'Comfort seat close-up' }}{% elsif isz > 0 %}{% assign ci = 2 | modulo: isz %}<img src='{{ product.images[ci] | image_url: width: 900 }}' alt='Comfort seat close-up' loading='lazy'>{% endif %}</div>
+      {%- endif -%}
+      {%- if product.metafields.pulse.hl_3.value != blank -%}
+      <div class='ad-c ad-s2 ad-img'>{{ product.metafields.pulse.hl_3.value | image_url: width: 900 | image_tag: loading: 'lazy', alt: 'Lithium battery', sizes: '(max-width: 860px) 50vw, 420px' }}</div>
+      {%- else -%}
+      <div class='ad-c ad-s2 ad-img'>{% if section.settings.closeup_battery != blank %}{{ section.settings.closeup_battery | image_url: width: 700 | image_tag: loading: 'lazy', alt: 'Lithium battery' }}{% elsif isz > 0 %}{% assign ci = 3 | modulo: isz %}<img src='{{ product.images[ci] | image_url: width: 700 }}' alt='Lithium battery' loading='lazy'>{% endif %}</div>
+      {%- endif -%}
+      {%- if product.metafields.pulse.hl_4.value != blank -%}
+      <div class='ad-c ad-s2 ad-img'>{{ product.metafields.pulse.hl_4.value | image_url: width: 900 | image_tag: loading: 'lazy', alt: 'Safety features', sizes: '(max-width: 860px) 50vw, 420px' }}</div>
+      {%- else -%}
+      <div class='ad-c ad-s2 ad-img'>{% if section.settings.closeup_brake != blank %}{{ section.settings.closeup_brake | image_url: width: 700 | image_tag: loading: 'lazy', alt: 'Brake and anti-tip wheel close-up' }}{% elsif isz > 0 %}{% assign ci = 4 | modulo: isz %}<img src='{{ product.images[ci] | image_url: width: 700 }}' alt='Brake and anti-tip wheel close-up' loading='lazy'>{% endif %}</div>
+      {%- endif -%}
+      {%- if product.metafields.pulse.hl_5.value != blank -%}
+      <div class='ad-c ad-s2 ad-img'>{{ product.metafields.pulse.hl_5.value | image_url: width: 900 | image_tag: loading: 'lazy', alt: 'All-terrain wheels', sizes: '(max-width: 860px) 50vw, 420px' }}</div>
+      {%- else -%}
+      <div class='ad-c ad-s2 ad-img'>{% if section.settings.closeup_wheel != blank %}{{ section.settings.closeup_wheel | image_url: width: 700 | image_tag: loading: 'lazy', alt: 'Wheel close-up' }}{% elsif isz > 0 %}{% assign ci = 5 | modulo: isz %}<img src='{{ product.images[ci] | image_url: width: 700 }}' alt='Wheel close-up' loading='lazy'>{% endif %}</div>
+      {%- endif -%}
+    </div>
+  </section>
+
+  <section class='ad-b2c'>
+    <div class='ad-c ad-img'>{% if isz > 0 %}{% assign fi = 6 | modulo: isz %}<img src='{{ product.images[fi] | image_url: width: 700 }}' alt='Foldable design' loading='lazy'>{% endif %}</div>
+    <div class='ad-c ad-img'>{% if isz > 0 %}{% assign fi = 7 | modulo: isz %}<img src='{{ product.images[fi] | image_url: width: 700 }}' alt='Lightweight frame' loading='lazy'>{% endif %}</div>
+    <div class='ad-c ad-img'>{% if isz > 0 %}{% assign fi = 8 | modulo: isz %}<img src='{{ product.images[fi] | image_url: width: 700 }}' alt='Premium build' loading='lazy'>{% endif %}</div>
+    <div class='ad-c ad-img'>{% if isz > 0 %}{% assign fi = 9 | modulo: isz %}<img src='{{ product.images[fi] | image_url: width: 700 }}' alt='Easy and safe controls' loading='lazy'>{% endif %}</div>
+  </section>
+  {%- if hl_cols.size >= 2 -%}</div>{%- endif -%}
+
+</div>
+
+<script>
+(function () {
+  var s = '{{ section.id }}';
+  var main = document.getElementById('admain-' + s);
+  var th = document.getElementById('adth-' + s);
+  if (main) {
+    var track = main.querySelector('.ad-track');
+    var slides = track ? track.children : [];
+    var tb = th ? th.querySelectorAll('.ad-t') : [];
+    var counter = main.querySelector('.ad-count span');
+    var up = th ? th.parentNode.querySelector('.ad-tup') : null, dn = th ? th.parentNode.querySelector('.ad-tdn') : null;
+    var c = 0, N = slides.length;
+    var vertical = function () { return th && getComputedStyle(th).flexDirection === 'column'; };
+    /* Keep the active thumbnail visible inside the thumbnail strip, without moving the page. */
+    var keepThumb = function (i) {
+      var t = tb[i]; if (!t) return;
+      if (vertical()) {
+        var top = t.offsetTop - th.offsetTop, bottom = top + t.offsetHeight;
+        if (top < th.scrollTop) th.scrollTo({ top: top });
+        else if (bottom > th.scrollTop + th.clientHeight) th.scrollTo({ top: bottom - th.clientHeight });
+      } else {
+        var left = t.offsetLeft - th.offsetLeft, right = left + t.offsetWidth;
+        if (left < th.scrollLeft) th.scrollTo({ left: left });
+        else if (right > th.scrollLeft + th.clientWidth) th.scrollTo({ left: right - th.clientWidth });
+      }
+    };
+    var mark = function (i) {
+      if (i === c && tb[i] && tb[i].classList.contains('on')) return;
+      c = i;
+      tb.forEach(function (e, k) { e.classList.toggle('on', k === i); });
+      if (counter) counter.textContent = i + 1;
+      keepThumb(i);
+    };
+    var go = function (i) {
+      if (!N) return;
+      if (i < 0) i = N - 1; if (i >= N) i = 0;
+      track.scrollTo({ left: i * track.clientWidth });
+      mark(i);
+    };
+    if (track) {
+      var raf = 0;
+      track.addEventListener('scroll', function () {
+        if (raf) return;
+        raf = requestAnimationFrame(function () { raf = 0; var w = track.clientWidth || 1; mark(Math.max(0, Math.min(N - 1, Math.round(track.scrollLeft / w)))); });
+      }, { passive: true });
+      /* Mouse drag to swipe on desktop (touch and trackpads swipe natively). */
+      var dx = null, sx = 0, sl0 = 0;
+      track.addEventListener('pointerdown', function (e) { if (e.pointerType !== 'mouse' || e.button !== 0) return; dx = 0; sx = e.clientX; sl0 = track.scrollLeft; track.classList.add('drag'); });
+      window.addEventListener('pointermove', function (e) { if (dx === null) return; dx = e.clientX - sx; track.scrollLeft = sl0 - dx; });
+      window.addEventListener('pointerup', function () {
+        if (dx === null) return;
+        var w = track.clientWidth || 1, base = Math.round(sl0 / w), moved = dx; dx = null;
+        track.classList.remove('drag');
+        go(Math.abs(moved) > w * 0.12 ? base + (moved < 0 ? 1 : -1) : base);
+      });
+      window.addEventListener('resize', function () { track.scrollLeft = c * track.clientWidth; });
+    }
+    var p = main.querySelector('.ad-a1'), n = main.querySelector('.ad-a2');
+    if (p) p.addEventListener('click', function () { go(c - 1); });
+    if (n) n.addEventListener('click', function () { go(c + 1); });
+    tb.forEach(function (e) { e.addEventListener('click', function () { go(parseInt(e.dataset.i, 10)); }); });
+    /* Up / down buttons for the thumbnail strip, shown only when there are more photos than fit. */
+    var navState = function () {
+      if (!th || !up || !dn) return;
+      var more = vertical() && th.scrollHeight > th.clientHeight + 2;
+      up.hidden = dn.hidden = !more;
+      if (!more) return;
+      up.disabled = th.scrollTop <= 2;
+      dn.disabled = th.scrollTop + th.clientHeight >= th.scrollHeight - 2;
+    };
+    if (up && dn) {
+      up.addEventListener('click', function () { th.scrollBy({ top: -(th.clientHeight - 60) }); });
+      dn.addEventListener('click', function () { th.scrollBy({ top: th.clientHeight - 60 }); });
+      th.addEventListener('scroll', navState, { passive: true });
+      window.addEventListener('resize', navState);
+      navState();
+      window.addEventListener('load', navState);
+    }
+  }
+  var pin = document.getElementById('adpin-' + s), pb = document.getElementById('adpinb-' + s), pm = document.getElementById('adpinmsg-' + s);
+  if (pin && pb && pm) pb.addEventListener('click', function () {
+    var v = (pin.value || '').trim(); pm.hidden = false;
+    if (/^[1-9][0-9]{5}$/.test(v)) { pm.classList.remove('err'); pm.textContent = 'Free doorstep delivery is available across 18,000+ pin codes in India. Our team will confirm the delivery date for ' + v + '.'; }
+    else { pm.classList.add('err'); pm.textContent = 'Please enter a valid 6-digit pincode.'; }
+  });
+})();
+</script>
+
+<script>
+/* Quick Product Highlights: big tile media (videos and/or images) from the product's
+   "Highlights: big tile" field. Plays muted while on screen, one after another. */
+(function () {
+  var w = document.getElementById('adhv-{{ section.id }}');
+  if (!w) return;
+  var items = [].slice.call(w.querySelectorAll('.ad-mv'));
+  var dots = [].slice.call(w.querySelectorAll('.ad-mdots button'));
+  var sound = w.querySelector('.ad-msound');
+  var i = 0, timer = null, inView = false, muted = true;
+  var vid = function (n) { return items[n] ? items[n].querySelector('video') : null; };
+  items.forEach(function (it) {
+    var v = it.querySelector('video');
+    if (!v) return;
+    v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.removeAttribute('controls');
+    v.loop = items.length === 1;
+    v.addEventListener('ended', function () { if (items.length > 1) next(); });
+  });
+  function play() {
+    clearTimeout(timer);
+    if (!inView) return;
+    var v = vid(i);
+    if (v) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+    else if (items.length > 1) timer = setTimeout(next, 5000);
+  }
+  function show(n) {
+    items.forEach(function (it, k) {
+      it.classList.toggle('on', k === n);
+      var v = it.querySelector('video');
+      if (v && k !== n) v.pause();
+    });
+    dots.forEach(function (d, k) { d.classList.toggle('on', k === n); });
+    i = n;
+    var v = vid(n); if (v) { try { v.currentTime = 0; } catch (e) {} }
+    play();
+  }
+  function next() { show((i + 1) % items.length); }
+  dots.forEach(function (d, k) { d.addEventListener('click', function () { show(k); }); });
+  if (sound && w.querySelector('video')) {
+    sound.hidden = false;
+    sound.addEventListener('click', function () {
+      muted = !muted;
+      items.forEach(function (it) { var v = it.querySelector('video'); if (v) v.muted = muted; });
+      sound.classList.toggle('is-on', !muted);
+      sound.setAttribute('aria-label', muted ? 'Turn sound on' : 'Turn sound off');
+      play();
+    });
+  }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (es) {
+      inView = es[0].isIntersecting;
+      if (inView) play();
+      else { clearTimeout(timer); items.forEach(function (it) { var v = it.querySelector('video'); if (v) v.pause(); }); }
+    }, { threshold: 0.35 }).observe(w);
+  } else { inView = true; play(); }
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Pulse Product Details",
+  "settings": [
+    { "type": "text", "id": "whatsapp_number", "label": "WhatsApp number (with country code, no + or spaces)", "default": "919071101108" },
+    { "type": "text", "id": "phone_number", "label": "Call number (with country code, no + or spaces)", "default": "919071101108" },
+    { "type": "text", "id": "phone_label", "label": "Call number as shown to customers", "default": "+91 90711 01108" },
+    { "type": "header", "content": "Product page tabs" },
+    { "type": "richtext", "id": "manual_html", "label": "Owner's Manual text (shown when a product has no manual file)", "default": "<p>Need the owner's manual for this wheelchair? WhatsApp or call us on +91 90711 01108 and we will send you a copy.</p>" },
+    { "type": "text", "id": "warranty_page", "label": "Warranty tab: page handle", "default": "warranty-policy" },
+    { "type": "text", "id": "returns_page", "label": "Return and Refund tab: page handle", "default": "returns-service" },
+    { "type": "header", "content": "Quick Product Highlights close-ups" },
+    { "type": "image_picker", "id": "closeup_joystick", "label": "Joystick Control photo" },
+    { "type": "image_picker", "id": "closeup_seat", "label": "Comfort Seat photo" },
+    { "type": "image_picker", "id": "closeup_battery", "label": "Lithium Battery photo" },
+    { "type": "image_picker", "id": "closeup_brake", "label": "Safety First photo" },
+    { "type": "image_picker", "id": "closeup_wheel", "label": "All-Terrain Wheels photo" }
+  ],
+  "blocks": [ { "type": "@app" } ]
+}
+{% endschema %}
