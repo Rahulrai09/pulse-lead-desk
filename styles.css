@@ -204,3 +204,5 @@ select.inp.mini{padding:4px 8px;width:auto;font-size:12.5px}
 .dkpis span{font-size:12px;color:var(--muted)}
 .dkpis b{font-size:18px}
 #cFilters .btn{margin-left:auto}
+.dh .row .acts{flex-wrap:nowrap}
+#dRefresh.stale{border-color:var(--accent,#E8892B);color:var(--accent,#E8892B);font-weight:700}

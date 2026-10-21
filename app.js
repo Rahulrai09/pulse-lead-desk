@@ -547,7 +547,12 @@
     renderCounts();
     renderPeriod();
     ({ overview: renderOverview, contacts: renderContacts, pipeline: renderPipeline, checkouts: renderCheckouts, orders: renderOrders, schedule: renderSchedule, team: renderTeam, reports: renderReports })[S.view]?.();
-    if (S.open) renderDrawer();
+    // The open contact panel is not redrawn by background syncs (that would wipe what someone is typing).
+    // It redraws only right after the user's own save in it; otherwise the Refresh button lights up.
+    if (S.open) {
+      if (S.drawerSelf && Date.now() - S.drawerSelf < 8000) { S.drawerSelf = 0; renderDrawer(); }
+      else { const b = $("dRefresh"); if (b && !b.classList.contains("stale")) { b.classList.add("stale"); b.textContent = "Refresh · new data"; } }
+    }
   }
   function setView(v) {
     if (v === "team" && !isAdmin()) v = "overview";
@@ -578,7 +583,7 @@
     $("drawerRoot").innerHTML = `<div class="scrim" data-close></div>
     <aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(p.name)}">
       <div class="dh">
-        <div class="row"><h2>${esc(p.name)}</h2><button class="btn small" type="button" data-close>Close</button></div>
+        <div class="row"><h2>${esc(p.name)}</h2><div class="acts"><button class="btn small" type="button" id="dRefresh" data-drefresh title="Load the latest activity for this contact">Refresh</button><button class="btn small" type="button" data-close>Close</button></div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${chip(p)}${p.fresh ? '<span class="chip c-checkout">Fresh sign-up</span>' : ""}${p.lastLogin && now() - t(p.lastLogin) < DAY ? '<span class="chip c-checkout">Logged in today</span>' : ""}</div>
         ${actions(p)}
         ${p.leads?.length && canWrite() ? `<div class="acts"><button class="btn small" type="button" data-edit-lead="${esc(p.leads[0].key)}">Edit lead</button>${isAdmin() && p.source === "lead" ? `<button class="btn small" type="button" data-del-lead="${esc(p.leads[0].key)}">Delete lead</button>` : ""}</div>` : ""}
@@ -858,7 +863,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
+    const el = e.target.closest("[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -869,6 +874,7 @@
     if (el.matches("[data-export-table]")) { const [id, name] = el.dataset.exportTable.split("|"); downloadXlsx(name, tableRows(id)); return; }
     if (el.id === "repMakeNow") { el.disabled = true; el.textContent = "Making…"; const { error } = await sb.functions.invoke("daily-report", { body: { now: true } }); if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch {} toast("Couldn't make the report: " + m); } else { S.raw.reports = (await sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14)).data || []; renderReports(); toast("Report ready"); } return; }
     if (el.id === "tlCopy") { makeLink(); if ($("tlOut").value) copy($("tlOut").value, "Tracking link"); return; }
+    if (el.matches("[data-drefresh]")) { const sc = document.querySelector("#drawerRoot .db"); const top = sc ? sc.scrollTop : 0; renderDrawer(); const sc2 = document.querySelector("#drawerRoot .db"); if (sc2) sc2.scrollTop = top; toast("Contact refreshed"); return; }
     if (el.matches("[data-close]")) { closeDrawer(); return; }
     if (el.matches(".tab")) { setView(el.dataset.v); return; }
     if (el.id === "refreshBtn" || el.id === "bannerRetry") { runSync(); return; }
@@ -881,6 +887,9 @@
     if (el.matches("[data-restore]")) { if (await team("restore", { email: el.dataset.restore })) toast("Access restored"); return; }
     if (el.matches("[data-open]")) { if (e.target.closest("a,button:not(.card),input,select")) return; openDrawer(el.dataset.open); }
   });
+  const markSelf = (e) => { const t = e.target; if (!t.closest || !t.closest("#drawerRoot") || t.closest("[data-drefresh],[data-close]")) return;
+    if (e.type === "submit" || (e.type === "change" && t.matches("select")) || (e.type === "click" && t.closest("button"))) S.drawerSelf = Date.now(); };
+  ["submit", "change", "click"].forEach((ev) => document.addEventListener(ev, markSelf, true));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("modalRoot").innerHTML) $("modalRoot").innerHTML = ""; else if (S.open) closeDrawer(); } });
   document.addEventListener("change", async (e) => {
     const el = e.target;
