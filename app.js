@@ -416,12 +416,18 @@
       { id: "total", label: "Total contacts", sub: `${S.raw.customers.length} accounts · ${C.filter((p) => p.leads?.length).length} leads`, empty: "No contacts yet.", items: byAt(C.map((p) => ({ p, at: p.lastActive || p.createdAt, line: `<b>${esc(p.statusText)}</b>${p.value ? " · " + inr(p.value) : ""}` }))) },
       (() => {
         // An enquiry is done once that person has paid, or the team marked the stage Won/Lost.
-        const all = L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p && { p, x, done: p.status === "converted" || p.stage === "won" || p.stage === "lost" }; }).filter(Boolean);
+        // Done only counts what happened AFTER this enquiry: a paid order placed after it, or the stage set to Won/Lost after it.
+        const doneFor = (p, x) => { const at = t(x.created_at);
+          const paidAfter = p.orders.find((o) => !o.cancelled_at && ["PAID", "PARTIALLY_REFUNDED"].includes(o.financial) && t(o.created_at) >= at);
+          if (paidAfter) return "paid";
+          if ((p.stage === "won" || p.stage === "lost") && p.crm?.updated_at && t(p.crm.updated_at) >= at) return STAGE_NAME[p.stage];
+          return ""; };
+        const all = L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); if (!p) return null; const why = doneFor(p, x); return { p, x, done: !!why, why }; }).filter(Boolean);
         const pend = all.filter((r) => !r.done), done = all.filter((r) => r.done);
         const show = S.leadsDone ? done : pend;
         return { id: "leads", label: "Enquiries Leads", value: pend.length, sub: `Pending: ${pend.length} · Done: ${done.length}`, toggle: { done: S.leadsDone, nPend: pend.length, nDone: done.length },
           empty: S.leadsDone ? "No finished enquiries yet." : "No pending enquiries. Leads you add and website forms (rent, donate, demo, contact) appear here.",
-          items: show.map(({ p, x, done: d }) => ({ p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${p.status === "converted" ? "paid" : esc(STAGE_NAME[p.stage])})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
+          items: show.map(({ p, x, done: d, why }) => ({ p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${esc(why)})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
       })(),
       { id: "browse", label: "Browsing now", sub: "on the store, last 30 min", empty: "Nobody is on the store right now.", items: browseItems() },
       { id: "carts", label: "Live add to cart", sub: S.period.p === "all" ? "last 48 h" : periodLabel(), empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
