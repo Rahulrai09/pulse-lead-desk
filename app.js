@@ -358,34 +358,37 @@
   const STAR_TIP = ["", "4+ days old", "3 days old", "2 days old", "Yesterday", "Today"];
   const starHtml = (n) => `<span class="stars s${n}" title="${STAR_TIP[n]}" aria-label="${n} of 5 stars">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
   const initials = (n) => (String(n || "?").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2) || "?").toUpperCase();
-  const TILE_STEP = 6;
+  const TILE_STEP = 8;
   S.more = S.more || {}; S.tileData = S.tileData || {};
+  // One card per person in a board column. it: { p (contact or null), name, chip, at, line, kv, note, link }
   function tiles(id, items, empty) {
     S.tileData[id] = items;
+    const cnt = $(id + "N"); if (cnt) cnt.textContent = items.length;
     if (!items.length) return `<div class="empty">${empty}</div>`;
     const shown = S.more[id] || TILE_STEP;
     const cards = items.slice(0, shown).map((it) => {
-      const p = it.p, st = starsFor(it.at);
-      const kv = [["Phone", p.phone], ["Email", p.email], ["City", p.city], ["Came from", p.came], ...(it.kv || [])].filter((r) => r[1]);
-      return `<article class="tile" data-open="${p.key}">
-        <div class="t-top"><span class="av">${esc(initials(p.name))}</span>${starHtml(st)}</div>
-        <b class="t-name">${esc(p.name)}</b>
-        <div class="t-chips">${chip(p)}${it.tag ? `<span class="chip c-signup">${esc(it.tag)}</span>` : ""}</div>
+      const p = it.p, st = starsFor(it.at), name = p ? p.name : it.name || "Guest";
+      const own = p && p.owner ? memberName(p.owner) : "";
+      const kv = (p ? [["Phone", p.phone], ["City", p.city], ["From", p.came]] : []).concat(it.kv || []).filter((r) => r[1]);
+      return `<article class="tile"${p ? ` data-open="${p.key}"` : ""}>
+        <div class="t-top"><span class="av">${esc(initials(name))}</span><div class="t-who"><b class="t-name">${esc(name)}</b>${starHtml(st)}</div></div>
+        <div class="t-chips">${it.chip || (p ? chip(p) : "")}</div>
         <p class="t-line">${it.line}</p>
-        <dl class="t-kv">${kv.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
+        ${kv.length ? `<dl class="t-kv">${kv.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
         ${it.note ? `<p class="t-note">${esc(it.note)}</p>` : ""}
+        <div class="t-owner${own ? " on" : ""}"><span>Owner</span><b>${own ? esc(own) : "Null"}</b></div>
         <div class="t-when">${fmtDT(it.at)} · ${ago(it.at)}</div>
-        <div class="t-acts">${actions(p, !!it.link)}</div>
+        ${p ? `<div class="t-acts">${actions(p, !!it.link)}</div>` : ""}
       </article>`;
     }).join("");
-    const more = items.length > shown ? `<div class="t-more"><button class="btn small" type="button" data-more="${id}">View more (${items.length - shown} more)</button></div>` : items.length > TILE_STEP ? `<div class="t-more"><button class="btn small" type="button" data-less="${id}">Show less</button></div>` : "";
-    return `<div class="tiles">${cards}</div>${more}`;
+    const more = items.length > shown ? `<button class="btn small t-more" type="button" data-more="${id}">View more (${items.length - shown})</button>` : items.length > TILE_STEP ? `<button class="btn small t-more" type="button" data-less="${id}">Show less</button>` : "";
+    return cards + more;
   }
   function downloadCsv(id) {
     const items = S.tileData[id] || [];
     if (!items.length) return toast("Nothing to download");
-    const rows = items.map((it) => { const p = it.p; const r = { Stars: starsFor(it.at), Name: p.name, Phone: p.phone, Email: p.email, City: p.city, Status: p.statusText, "Came from": p.came, Date: fmtDT(it.at), Details: String(it.line || "").replace(/<[^>]+>/g, "") };
-      (it.kv || []).forEach(([k, v]) => { r[k] = v; }); if (it.note) r.Note = it.note; r.Owner = p.owner ? memberName(p.owner) : ""; return r; });
+    const rows = items.map((it) => { const p = it.p || {}; const r = { Stars: starsFor(it.at), Name: p.name || it.name || "Guest", Phone: p.phone || "", Email: p.email || "", City: p.city || "", Status: p.statusText || String(it.chip || "").replace(/<[^>]+>/g, ""), "Came from": p.came || "", Date: fmtDT(it.at), Details: String(it.line || "").replace(/<[^>]+>/g, "") };
+      (it.kv || []).forEach(([k, v]) => { r[k] = v; }); if (it.note) r.Note = it.note; r.Owner = p.owner ? memberName(p.owner) : "Null"; return r; });
     const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
     const q = (v) => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const csv = "﻿" + [cols.join(","), ...rows.map((r) => cols.map((c) => q(r[c])).join(","))].join("\r\n");
@@ -399,11 +402,11 @@
     renderBrowsing();
     renderCarts();
     const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => S.period.p === "all" ? now() - t(x.created_at) < 14 * DAY : inRange(x.created_at));
-    $("leadsCount").textContent = L.length ? `${L.length} in the ${S.period.p === "all" ? "last 14 days" : periodLabel()}` : "";
-    $("leadsList").innerHTML = tiles("leads", L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p && { p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}`, kv: [["Interested in", x.interest || ""], ["Owner", p.owner ? memberName(p.owner) : ""]], note: x.note || "" }; }).filter(Boolean), "Leads you add and website forms (rent, donate, demo, contact) appear here.");
+    $("leadsCount").textContent = S.period.p === "all" ? "Last 14 days" : periodLabel();
+    $("leadsList").innerHTML = tiles("leads", L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p && { p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}`, kv: [["Wants", x.interest || ""]], note: x.note || "" }; }).filter(Boolean), "Leads you add and website forms (rent, donate, demo, contact) appear here.");
     const hot = S.contacts.filter((p) => (p.status === "notconverted" || p.status === "checkout") && now() - t(p.lastCheckout) < 14 * DAY);
     hot.sort((a, b) => t(b.lastCheckout) - t(a.lastCheckout));
-    $("hotList").innerHTML = tiles("hot", hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}`, kv: [["Owner", p.owner ? memberName(p.owner) : ""]] })), "No unconverted checkouts in the last 14 days.");
+    $("hotList").innerHTML = tiles("hot", hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` })), "No unconverted checkouts in the last 14 days.");
     const C = S.contacts;
     const steps = [["Contacts", C.length], ["Signed up", C.filter((p) => p.source === "customer").length], ["Started checkout", C.filter((p) => p.checkouts.length).length], ["Converted", C.filter((p) => p.status === "converted").length]];
     const max = Math.max(1, steps[0][1]);
@@ -413,7 +416,7 @@
     const fresh = C.filter((p) => p.fresh).sort((a, b) => t(b.createdAt) - t(a.createdAt));
     $("freshList").innerHTML = tiles("fresh", fresh.map((p) => ({ p, at: p.createdAt, line: `Joined ${fmtDT(p.createdAt)}` })), "No new sign-ups this week.");
     const logins = C.filter((p) => p.lastLogin).sort((a, b) => t(b.lastLogin) - t(a.lastLogin));
-    $("loginList").innerHTML = tiles("logins", logins.map((p) => ({ p, at: p.lastLogin, line: `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days` })), "Logins appear here once the store's login tracking is live.");
+    $("loginList").innerHTML = logins.length ? logins.slice(0, 8).map((p) => li(p, `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days`)).join("") : `<div class="empty">Logins appear here once the store's login tracking is live.</div>`;
   }
 
   function cartWho(ev) {
@@ -474,20 +477,23 @@
     }
     const rows = [...byP.values()].sort((a, b) => (a.c.startsWith("v:") - b.c.startsWith("v:")) || t(b.last.created_at) - t(a.last.created_at));
     const named = rows.filter((r) => !r.c.startsWith("v:")).length;
-    $("browseCount").textContent = rows.length ? `${rows.length} on the store in the last 30 min · ${named} logged in · ${rows.length - named} guests` : "People on the store in the last 30 min";
-    $("browseList").innerHTML = rows.length ? rows.map((r) => {
+    $("browseCount").textContent = rows.length ? `${named} logged in · ${rows.length - named} guests · 30 min` : "Last 30 min";
+    $("browseList").innerHTML = tiles("browse", rows.map((r) => {
       const p = r.c.startsWith("v:") ? null : byKey("c" + r.c);
-      const what = r.last.kind === "view" ? "Looking at " + esc(r.last.meta?.t || "a product") : r.last.kind === "search" ? `Searched “${esc(r.last.meta?.t || "")}”` : r.last.kind === "cart" ? "Added to cart · " + esc(r.last.meta?.t || "") : r.last.kind === "checkout" ? "On the payment page" : r.last.kind === "login" ? "Just logged in" : "Viewing " + esc(pageName(r.last.path, r.last.meta));
-      const sub = `<span style="color:var(--good)">● </span>${what} · ${ago(r.last.created_at)} · ${r.pages.size} page${r.pages.size === 1 ? "" : "s"} · ${esc(r.last.device || "")}`;
-      if (p) return li(p, sub);
-      return `<div class="li"><div class="who"><b>Guest ${esc(r.c.slice(-4).toUpperCase())} <span class="chip c-signup">Guest · not logged in</span></b><small>${sub}</small></div></div>`;
-    }).join("") : `<div class="empty">Nobody is on the store right now. Click any contact to see every page they've viewed.</div>`;
+      const what = r.last.kind === "view" ? "Looking at <b>" + esc(r.last.meta?.t || "a product") + "</b>" : r.last.kind === "search" ? `Searched “${esc(r.last.meta?.t || "")}”` : r.last.kind === "cart" ? "Added to cart · <b>" + esc(r.last.meta?.t || "") + "</b>" : r.last.kind === "checkout" ? "<b>On the payment page</b>" : r.last.kind === "login" ? "Just logged in" : "Viewing " + esc(pageName(r.last.path, r.last.meta));
+      return { p, name: p ? "" : "Guest " + r.c.slice(-4).toUpperCase(), chip: p ? "" : '<span class="chip c-signup">Guest · not logged in</span>', at: r.last.created_at, line: `<span style="color:var(--good)">● </span>${what}`, kv: [["Pages", String(r.pages.size)], ["Device", r.last.device || ""]] };
+    }), "Nobody is on the store right now.");
   }
   function renderCarts() {
     const evs = cartFeed();
     const people = new Set(evs.map(evPerson)).size, nCart = evs.filter((e) => e.kind === "cart" || e.added).length, nCk = evs.filter((e) => e.kind === "checkout").length;
-    $("cartCount").textContent = (evs.length ? `${nCart} added to cart · ${nCk} went to checkout · ${people} people · ` : "") + (S.period.p === "all" ? "last 48 h" : periodLabel());
-    $("cartList").innerHTML = evs.length ? evs.slice(0, 50).map(cartLine).join("") : `<div class="empty">Add-to-cart activity appears here the moment someone adds a wheelchair to their cart.</div>`;
+    $("cartCount").textContent = (evs.length ? `${nCart} carts · ${nCk} checkouts · ` : "") + (S.period.p === "all" ? "48 h" : periodLabel());
+    $("cartList").innerHTML = tiles("carts", evs.slice(0, 200).map((ev) => {
+      const m = ev.meta || {}, w = cartWho(ev);
+      const what = ev.kind === "checkout" ? `<b>Started checkout</b>${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}` : `Added <b>${esc(m.t || "a product")}</b>${m.q > 1 ? " ×" + m.q : ""}${m.a ? " · " + inr(m.a * (m.q || 1)) : ""}`;
+      const cls = w.tag.startsWith("Guest") ? "c-signup" : w.tag.startsWith("New") ? "c-checkout" : "c-converted";
+      return { p: w.p, name: w.name, chip: `<span class="chip ${cls}">${esc(w.tag)}</span>`, at: ev.created_at, line: what, link: ev.kind === "checkout", kv: w.p ? [] : [["Contact", m.ph || m.em || ""], ["Device", ev.device || ""]] };
+    }), "Add-to-cart activity appears here the moment someone adds a wheelchair to their cart.");
   }
 
   const C_FILTERS = [["all", "All"], ["leads", "Leads"], ["fresh", "Fresh sign-ups"], ["loggedin", "Logged in (7 d)"], ["checkout", "In checkout"], ["notconverted", "Not converted"], ["pending", "Pending"], ["converted", "Converted"], ["signup", "Signed up only"], ["mine", "Mine"], ["followup", "Has follow-up"]];

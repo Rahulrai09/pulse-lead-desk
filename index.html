@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=1792654513">
+<link rel="stylesheet" href="styles.css?v=1792654964">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0}</style>
 </head>
 <body>
@@ -78,37 +78,42 @@
 
   <section data-view="overview">
     <div class="kpis" id="kpis"></div>
-    <div class="panel" style="margin-top:18px">
-      <div class="panel-h"><h2>New leads &amp; enquiries</h2><p id="leadsCount"></p><button class="btn small" type="button" data-csv="leads" style="margin-left:auto">Download CSV</button></div>
-      <div class="list" id="leadsList"></div>
-    </div>
-    <div class="panel" style="margin-top:18px">
-      <div class="panel-h"><h2>Browsing now</h2><p id="browseCount"></p></div>
-      <div class="list" id="browseList"></div>
-    </div>
-    <div class="panel" style="margin-top:18px">
-      <div class="panel-h"><h2>Live add to cart</h2><p id="cartCount">Last 48 h</p></div>
-      <div class="list" id="cartList"></div>
+    <div class="lboard" style="margin-top:18px">
+      <section class="lcol">
+        <div class="lcol-h"><div><h2>New leads &amp; enquiries</h2><p id="leadsCount">Last 14 days</p></div><span class="lcol-n" id="leadsN">0</span></div>
+        <button class="btn small lcol-csv" type="button" data-csv="leads">Download CSV</button>
+        <div class="lcol-b" id="leadsList"></div>
+      </section>
+      <section class="lcol">
+        <div class="lcol-h"><div><h2>Browsing now</h2><p id="browseCount">Last 30 min</p></div><span class="lcol-n" id="browseN">0</span></div>
+        <button class="btn small lcol-csv" type="button" data-csv="browse">Download CSV</button>
+        <div class="lcol-b" id="browseList"></div>
+      </section>
+      <section class="lcol">
+        <div class="lcol-h"><div><h2>Live add to cart</h2><p id="cartCount">Last 48 h</p></div><span class="lcol-n" id="cartsN">0</span></div>
+        <button class="btn small lcol-csv" type="button" data-csv="carts">Download CSV</button>
+        <div class="lcol-b" id="cartList"></div>
+      </section>
+      <section class="lcol">
+        <div class="lcol-h"><div><h2>Hot leads</h2><p id="hotCount">Unpaid checkouts, 14 days</p></div><span class="lcol-n" id="hotN">0</span></div>
+        <button class="btn small lcol-csv" type="button" data-csv="hot">Download CSV</button>
+        <div class="lcol-b" id="hotList"></div>
+      </section>
+      <section class="lcol">
+        <div class="lcol-h"><div><h2>Fresh sign-ups</h2><p id="freshCount">New accounts, 7 days</p></div><span class="lcol-n" id="freshN">0</span></div>
+        <button class="btn small lcol-csv" type="button" data-csv="fresh">Download CSV</button>
+        <div class="lcol-b" id="freshList"></div>
+      </section>
     </div>
     <div class="two" style="margin-top:18px">
-      <div class="panel">
-        <div class="panel-h"><h2>Hot leads</h2><p>Checkouts not converted in the last 14 days. Call these first.</p><button class="btn small" type="button" data-csv="hot" style="margin-left:auto">Download CSV</button></div>
-        <div class="list" id="hotList"></div>
-      </div>
       <div class="panel">
         <div class="panel-h"><h2>Conversion funnel</h2><p>All time</p></div>
         <div class="funnel" id="funnel"></div>
         <div class="panel-h" style="margin:20px 0 8px"><h2>Due follow-ups</h2></div>
         <div class="list" id="dueList"></div>
       </div>
-    </div>
-    <div class="two" style="margin-top:18px">
       <div class="panel">
-        <div class="panel-h"><h2>Fresh sign-ups</h2><p>New customer accounts in the last 7 days</p><button class="btn small" type="button" data-csv="fresh" style="margin-left:auto">Download CSV</button></div>
-        <div class="list" id="freshList"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-h"><h2>Recent logins</h2><p>Customers who logged in on the store</p><button class="btn small" type="button" data-csv="logins" style="margin-left:auto">Download CSV</button></div>
+        <div class="panel-h"><h2>Recent logins</h2><p>Customers who logged in on the store</p></div>
         <div class="list" id="loginList"></div>
       </div>
     </div>
@@ -253,7 +258,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="config.js?v=1792654513"></script>
-<script src="app.js?v=1792654513"></script>
+<script src="config.js?v=1792654964"></script>
+<script src="app.js?v=1792654964"></script>
 </body>
 </html>
