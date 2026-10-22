@@ -414,7 +414,15 @@
       { id: "pending", label: "Pending", sub: "payment pending or to ship", cls: "k-warn", empty: "Nothing pending.", items: byAt(C.filter((p) => p.status === "pending" || p.statusText === "Converted · to ship").map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${esc(p.statusText)}</b> · ${inr(p.value)}` }))) },
       { id: "due", label: "Due today", sub: "follow-ups due or overdue", cls: fu.length ? "k-warn" : "", empty: "No follow-ups due today.", items: fu.map((f) => { const p = byKey(f.key); return p && { p, at: f.due_at, line: `<b>${esc(f.kind)}</b>${t(f.due_at) < now() ? " · overdue" : ""}`, note: f.note || "", kv: [["Assigned", f.assignee_email ? memberName(f.assignee_email) : ""]] }; }).filter(Boolean) },
       { id: "total", label: "Total contacts", sub: `${S.raw.customers.length} accounts · ${C.filter((p) => p.leads?.length).length} leads`, empty: "No contacts yet.", items: byAt(C.map((p) => ({ p, at: p.lastActive || p.createdAt, line: `<b>${esc(p.statusText)}</b>${p.value ? " · " + inr(p.value) : ""}` }))) },
-      { id: "leads", label: "New leads & enquiries", sub: S.period.p === "all" ? "last 14 days" : periodLabel(), empty: "Leads you add and website forms (rent, donate, demo, contact) appear here.", items: L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p && { p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}`, kv: [["Wants", x.interest || ""]], note: x.note || "" }; }).filter(Boolean) },
+      (() => {
+        // An enquiry is done once that person has paid, or the team marked the stage Won/Lost.
+        const all = L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p && { p, x, done: p.status === "converted" || p.stage === "won" || p.stage === "lost" }; }).filter(Boolean);
+        const pend = all.filter((r) => !r.done), done = all.filter((r) => r.done);
+        const show = S.leadsDone ? done : pend;
+        return { id: "leads", label: "Enquiries Leads", value: pend.length, sub: `Pending: ${pend.length} · Done: ${done.length}`, toggle: { done: S.leadsDone, nPend: pend.length, nDone: done.length },
+          empty: S.leadsDone ? "No finished enquiries yet." : "No pending enquiries. Leads you add and website forms (rent, donate, demo, contact) appear here.",
+          items: show.map(({ p, x, done: d }) => ({ p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${p.status === "converted" ? "paid" : esc(STAGE_NAME[p.stage])})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
+      })(),
       { id: "browse", label: "Browsing now", sub: "on the store, last 30 min", empty: "Nobody is on the store right now.", items: browseItems() },
       { id: "carts", label: "Live add to cart", sub: S.period.p === "all" ? "last 48 h" : periodLabel(), empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
       { id: "hot", label: "Hot leads", sub: "unpaid checkouts, 14 days", cls: "k-bad", empty: "No unconverted checkouts in the last 14 days.", items: byAt(hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
@@ -449,11 +457,12 @@
   function renderOverview() {
     const boxes = boxData();
     if (!boxes.some((b) => b.id === S.box)) S.box = boxes[0].id;
-    $("kpis").innerHTML = boxes.map((b) => `<button type="button" class="kpi ${b.cls || ""}${b.id === S.box ? " on" : ""}" data-box="${b.id}" aria-pressed="${b.id === S.box}"><span class="l">${esc(b.label)}</span><span class="v num">${b.items.length}</span><span class="s">${esc(b.sub)}</span></button>`).join("");
+    $("kpis").innerHTML = boxes.map((b) => `<button type="button" class="kpi ${b.cls || ""}${b.id === S.box ? " on" : ""}" data-box="${b.id}" aria-pressed="${b.id === S.box}"><span class="l">${esc(b.label)}</span><span class="v num">${b.value ?? b.items.length}</span><span class="s">${esc(b.sub)}</span></button>`).join("");
     const cur = boxes.find((b) => b.id === S.box);
     renderBoxFilters();
     const items = boxFilter(cur.items);
     $("bxTitle").textContent = cur.label;
+    $("bxToggle").innerHTML = cur.toggle ? `<div class="seg"><button type="button" data-ldone="0" aria-pressed="${!cur.toggle.done}">Pending ${cur.toggle.nPend}</button><button type="button" data-ldone="1" aria-pressed="${cur.toggle.done}">Done ${cur.toggle.nDone}</button></div>` : "";
     $("bxSub").textContent = items.length === cur.items.length ? cur.sub : `${items.length} of ${cur.items.length} match your filters · ${cur.sub}`;
     $("bxList").innerHTML = tiles("box", items, items.length || !cur.items.length ? cur.empty : "Nobody matches these filters.");
     S.tileName = cur.id;
@@ -1022,7 +1031,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
+    const el = e.target.closest("[data-ldone],[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -1033,6 +1042,7 @@
     if (el.matches("[data-export-table]")) { const [id, name] = el.dataset.exportTable.split("|"); downloadXlsx(name, tableRows(id)); return; }
     if (el.id === "repMakeNow") { el.disabled = true; el.textContent = "Making…"; const { error } = await sb.functions.invoke("daily-report", { body: { now: true } }); if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch {} toast("Couldn't make the report: " + m); } else { S.raw.reports = (await sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14)).data || []; renderReports(); toast("Report ready"); } return; }
     if (el.id === "tlCopy") { makeLink(); if ($("tlOut").value) copy($("tlOut").value, "Tracking link"); return; }
+    if (el.matches("[data-ldone]")) { S.leadsDone = el.dataset.ldone === "1"; S.more.box = TILE_STEP; render(); return; }
     if (el.matches("[data-cview]")) { S.cv.view = el.dataset.cview; saveCv(); renderContacts(); return; }
     if (el.matches("[data-cmore]")) { S.more.ctable = (S.more.ctable || 50) + 50; renderContacts(); return; }
     if (el.matches("[data-csort]")) { S.cv.sort = el.dataset.csort; saveCv(); renderContacts(); return; }
