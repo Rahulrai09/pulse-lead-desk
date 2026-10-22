@@ -676,53 +676,84 @@
     ev.sort((a, b) => t(b.at) - t(a.at));
     const ro = !canWrite();
     const tomorrow = new Date(now() + DAY).toISOString().slice(0, 10);
+    const paid = p.orders.filter((o) => !o.cancelled_at && o.financial === "PAID").reduce((s, o) => s + Number(o.total), 0);
+    const openFu = p.followups.filter((f) => !f.done), doneFu = p.followups.filter((f) => f.done);
+    const tab = S.dTab || "details";
+    const dayKey = (d) => new Date(t(d) + 19800000).toISOString().slice(0, 10);
+    const dayLbl = (d) => { const k = dayKey(d), td = dayKey(new Date()), yd = dayKey(new Date(now() - DAY)); return k === td ? "Today" : k === yd ? "Yesterday" : new Date(d).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" }); };
+    let lastDay = "", tlHtml = "";
+    ev.forEach((e, i) => { const dk = dayKey(e.at); if (dk !== lastDay) { tlHtml += `<div class="tl-day${i >= 30 ? " tl-x" : ""}">${dayLbl(e.at)}</div>`; lastDay = dk; }
+      tlHtml += `<div class="ev ${e.cls}${i >= 30 ? " tl-x" : ""}"><b>${esc(e.title)}</b><small>${new Date(e.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}${e.sub ? " · " + esc(e.sub) : ""}</small>${e.text ? `<p>${esc(e.text)}</p>` : ""}</div>`; });
+    const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+    const own = p.owner ? memberName(p.owner) : "";
+    const tabBtn = (id, label, n) => `<button type="button" class="dtab${tab === id ? " on" : ""}" data-dtab="${id}">${label}${n != null ? ` <span>${n}</span>` : ""}</button>`;
     $("drawerRoot").innerHTML = `<div class="scrim" data-close></div>
     <aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(p.name)}">
       <div class="dh">
-        <div class="row"><h2>${esc(p.name)}</h2><div class="acts"><button class="btn small" type="button" id="dRefresh" data-drefresh title="Load the latest activity for this contact">Refresh</button><button class="btn small" type="button" data-close>Close</button></div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${chip(p)}${p.fresh ? '<span class="chip c-checkout">Fresh sign-up</span>' : ""}${p.lastLogin && now() - t(p.lastLogin) < DAY ? '<span class="chip c-checkout">Logged in today</span>' : ""}</div>
+        <div class="row">
+          <span class="av av-lg">${esc(initials(p.name))}</span>
+          <div class="dh-who"><h2>${esc(p.name)}</h2>${starHtml(starsFor(p.lastActive || p.createdAt))}</div>
+          <div class="acts"><button class="btn small" type="button" id="dRefresh" data-drefresh title="Load the latest activity for this contact">Refresh</button><button class="btn small" type="button" data-close>Close</button></div>
+        </div>
+        <div class="dh-chips">${chip(p)}${p.fresh ? '<span class="chip c-checkout">Fresh sign-up</span>' : ""}${p.lastLogin && now() - t(p.lastLogin) < DAY ? '<span class="chip c-checkout">Logged in today</span>' : ""}<span class="t-owner${own ? " on" : ""} dh-own"><span>Owner</span><b>${own ? esc(own) : "Null"}</b></span></div>
+        <div class="dstats">
+          <div><span>Value</span><b class="num">${inr(paid || p.value)}</b><small>${paid ? "paid" : p.value ? "in checkout" : "—"}</small></div>
+          <div><span>Last seen</span><b>${p.lastSeen ? ago(p.lastSeen) : "—"}</b><small>${p.lastLogin ? "login " + ago(p.lastLogin) : "no login yet"}</small></div>
+          <div><span>Checkouts</span><b class="num">${p.checkouts.length}</b><small>${p.lastCheckout ? ago(p.lastCheckout) : "none"}</small></div>
+          <div><span>Orders</span><b class="num">${p.orders.length}</b><small>${openFu.length} follow-up${openFu.length === 1 ? "" : "s"} open</small></div>
+        </div>
         ${actions(p)}
-        ${p.leads?.length && canWrite() ? `<div class="acts"><button class="btn small" type="button" data-edit-lead="${esc(p.leads[0].key)}">Edit lead</button>${isAdmin() && p.source === "lead" ? `<button class="btn small" type="button" data-del-lead="${esc(p.leads[0].key)}">Delete lead</button>` : ""}</div>` : ""}
+        <div class="dso">
+          <label>Stage<select class="inp" id="dStage" ${ro ? "disabled" : ""}>${STAGES.map(([id, l]) => `<option value="${id}" ${p.stage === id ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+          <label>Owner<select class="inp" id="dOwner" ${ro ? "disabled" : ""}>${teamOptions(p.owner).replace(">Nobody<", ">Null (no owner)<")}</select></label>
+          ${p.leads?.length && canWrite() ? `<div class="acts dso-acts"><button class="btn small" type="button" data-edit-lead="${esc(p.leads[0].key)}">Edit lead</button>${isAdmin() && p.source === "lead" ? `<button class="btn small" type="button" data-del-lead="${esc(p.leads[0].key)}">Delete lead</button>` : ""}</div>` : ""}
+        </div>
+        <div class="dtabs">${tabBtn("details", "Details")}${tabBtn("fu", "Follow-ups", openFu.length)}${tabBtn("tl", "Timeline", ev.length)}${ro ? "" : tabBtn("note", "Add note")}</div>
       </div>
       <div class="db">
-        <dl class="kv">
-          <dt>Phone</dt><dd>${p.phone ? `<span class="copyable">${esc(p.phone)}</span>` : "—"}</dd>
-          <dt>Email</dt><dd>${p.email ? `<span class="copyable">${esc(p.email)}</span>` : "—"}</dd>
-          <dt>City</dt><dd>${esc(p.city || "—")}</dd>
-          <dt>Came from</dt><dd>${esc(p.came || "Direct / unknown")}${p.camp ? " · campaign " + esc(p.camp) : ""}</dd>
-          ${p.leads?.length ? `<dt>Lead</dt><dd>${p.leads.map((L) => `${esc(L.kind)} · ${esc(L.source)} · ${fmtDT(L.created_at)}${L.interest ? " · " + esc(L.interest) : ""}`).join("<br>")}</dd>` : ""}
-          <dt>Signed up</dt><dd>${p.source === "customer" ? fmtDT(p.createdAt) : p.source === "lead" ? "No store account yet" : "Guest (no account)"}</dd>
-          <dt>First login</dt><dd>${p.firstLogin ? fmtDT(p.firstLogin) : "—"}</dd>
-          <dt>Last login</dt><dd>${p.lastLogin ? fmtDT(p.lastLogin) + " · " + ago(p.lastLogin) : "—"}</dd>
-          <dt>Last seen</dt><dd>${p.lastSeen ? ago(p.lastSeen) : "—"}</dd>
-          <dt>First checkout</dt><dd>${fmtDT(p.firstCheckout)}</dd>
-          <dt>Last checkout</dt><dd>${fmtDT(p.lastCheckout)}</dd>
-          <dt>Interested in</dt><dd>${esc(p.cart || "—")}</dd>
-          <dt>Orders</dt><dd class="num">${p.orders.length} · ${inr(p.orders.filter((o) => !o.cancelled_at && o.financial === "PAID").reduce((s, o) => s + Number(o.total), 0))} paid</dd>
-        </dl>
-        <div class="sec"><h4>Stage and owner</h4>
-          <div class="row2" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <select class="inp" id="dStage" aria-label="Stage" ${ro ? "disabled" : ""}>${STAGES.map(([id, l]) => `<option value="${id}" ${p.stage === id ? "selected" : ""}>${l}</option>`).join("")}</select>
-            <select class="inp" id="dOwner" aria-label="Owner" ${ro ? "disabled" : ""}>${teamOptions(p.owner)}</select>
-          </div>
+        <div class="dpane" data-pane="details"${tab === "details" ? "" : " hidden"}>
+          <div class="dcard"><h4>Contact</h4><dl class="kv">
+            ${row("Phone", p.phone ? `<span class="copyable">${esc(p.phone)}</span>` : "—")}
+            ${row("Email", p.email ? `<span class="copyable">${esc(p.email)}</span>` : "—")}
+            ${row("City", esc(p.city || "—"))}
+            ${row("Came from", esc(p.came || "Direct / unknown") + (p.camp ? " · campaign " + esc(p.camp) : ""))}
+          </dl></div>
+          <div class="dcard"><h4>Interest &amp; purchases</h4><dl class="kv">
+            ${row("Interested in", esc(p.cart || "—"))}
+            ${p.leads?.length ? row("Lead", p.leads.map((L) => `${esc(L.kind)} · ${esc(L.source)} · ${fmtDT(L.created_at)}${L.interest ? " · " + esc(L.interest) : ""}${L.note ? `<span class="kv-note">${esc(L.note)}</span>` : ""}`).join("<br>")) : ""}
+            ${row("First checkout", fmtDT(p.firstCheckout))}
+            ${row("Last checkout", fmtDT(p.lastCheckout))}
+            ${row("Orders", `<span class="num">${p.orders.length} · ${inr(paid)} paid</span>`)}
+          </dl></div>
+          <div class="dcard"><h4>Store account</h4><dl class="kv">
+            ${row("Signed up", p.source === "customer" ? fmtDT(p.createdAt) : p.source === "lead" ? "No store account yet" : "Guest (no account)")}
+            ${row("First login", p.firstLogin ? fmtDT(p.firstLogin) : "—")}
+            ${row("Last login", p.lastLogin ? fmtDT(p.lastLogin) + " · " + ago(p.lastLogin) : "—")}
+            ${row("Last seen", p.lastSeen ? fmtDT(p.lastSeen) + " · " + ago(p.lastSeen) : "—")}
+          </dl></div>
         </div>
-        <div class="sec"><h4>Follow-ups</h4>
-          <div class="list">${p.followups.length ? p.followups.map(fuRow).join("") : '<div class="muted">No follow-ups planned.</div>'}</div>
-          ${ro ? "" : `<form class="frm" id="dFu" style="margin-top:10px">
+        <div class="dpane" data-pane="fu"${tab === "fu" ? "" : " hidden"}>
+          ${ro ? "" : `<form class="frm dcard" id="dFu"><h4>Plan a follow-up</h4>
             <div class="row2"><input class="inp" type="date" id="dFuDate" required aria-label="Date" value="${tomorrow}"><input class="inp" type="time" id="dFuTime" value="11:00" aria-label="Time"></div>
             <div class="row2"><select class="inp" id="dFuType" aria-label="Type"><option>Call</option><option>WhatsApp</option><option>Demo</option><option>Home visit</option><option>Email</option></select><select class="inp" id="dFuWho" aria-label="Assign to">${teamOptions(p.owner || S.me.email.toLowerCase())}</select></div>
             <input class="inp" id="dFuNote" placeholder="What to do" aria-label="Note">
             <button class="btn" type="submit">Schedule follow-up</button>
           </form>`}
+          <div class="dcard"><h4>Open (${openFu.length})</h4><div class="list">${openFu.length ? openFu.map(fuRow).join("") : '<div class="muted">No open follow-ups.</div>'}</div></div>
+          ${doneFu.length ? `<details class="dcard"><summary><h4 style="display:inline">Done (${doneFu.length})</h4></summary><div class="list">${doneFu.map(fuRow).join("")}</div></details>` : ""}
         </div>
-        ${ro ? "" : `<div class="sec"><h4>Add a note</h4>
-          <form class="frm" id="dNote"><textarea class="inp" id="dNoteText" placeholder="e.g. Wants to try the chair at home first. Weight 95 kg."></textarea><button class="btn" type="submit">Save note</button></form>
+        <div class="dpane" data-pane="tl"${tab === "tl" ? "" : " hidden"}>
+          <div class="tl">${tlHtml || '<div class="muted">No activity yet.</div>'}</div>
+          ${ev.length > 30 ? `<button class="btn small" type="button" data-tl-all style="margin-top:10px">Show all ${ev.length} events</button>` : ""}
+        </div>
+        ${ro ? "" : `<div class="dpane" data-pane="note"${tab === "note" ? "" : " hidden"}>
+          <form class="frm dcard" id="dNote"><h4>Add a note</h4><textarea class="inp" id="dNoteText" placeholder="e.g. Wants to try the chair at home first. Weight 95 kg."></textarea><button class="btn" type="submit">Save note</button></form>
+          ${p.notes.length ? `<div class="dcard"><h4>Notes (${p.notes.length})</h4>${p.notes.map((n) => `<div class="dnote"><b>${esc(memberName(n.author_email))}</b><small>${fmtDT(n.created_at)}</small><p>${esc(n.body)}</p></div>`).join("")}</div>` : ""}
         </div>`}
-        <div class="sec"><h4>Timeline</h4><div class="tl">${ev.map((e) => `<div class="ev ${e.cls}"><b>${esc(e.title)}</b><small>${fmtDT(e.at)}${e.sub ? " · " + esc(e.sub) : ""}</small>${e.text ? `<p>${esc(e.text)}</p>` : ""}</div>`).join("")}</div></div>
       </div>
     </aside>`;
   }
-  const openDrawer = (k) => { S.open = k; renderDrawer(); };
+  const openDrawer = (k) => { if (S.open !== k) S.dTab = "details"; S.open = k; renderDrawer(); };
   const closeDrawer = () => { S.open = null; $("drawerRoot").innerHTML = ""; };
 
   /* ---------- Writes ---------- */
@@ -959,7 +990,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
+    const el = e.target.closest("[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -970,6 +1001,8 @@
     if (el.matches("[data-export-table]")) { const [id, name] = el.dataset.exportTable.split("|"); downloadXlsx(name, tableRows(id)); return; }
     if (el.id === "repMakeNow") { el.disabled = true; el.textContent = "Making…"; const { error } = await sb.functions.invoke("daily-report", { body: { now: true } }); if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch {} toast("Couldn't make the report: " + m); } else { S.raw.reports = (await sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14)).data || []; renderReports(); toast("Report ready"); } return; }
     if (el.id === "tlCopy") { makeLink(); if ($("tlOut").value) copy($("tlOut").value, "Tracking link"); return; }
+    if (el.matches("[data-dtab]")) { S.dTab = el.dataset.dtab; document.querySelectorAll("#drawerRoot .dtab").forEach((b) => b.classList.toggle("on", b === el)); document.querySelectorAll("#drawerRoot .dpane").forEach((x) => { x.hidden = x.dataset.pane !== S.dTab; }); const db = document.querySelector("#drawerRoot .db"); if (db) db.scrollTop = 0; return; }
+    if (el.matches("[data-tl-all]")) { document.querySelectorAll("#drawerRoot .tl-x").forEach((x) => x.classList.remove("tl-x")); el.remove(); return; }
     if (el.matches("[data-box]")) { S.box = el.dataset.box; S.more.box = TILE_STEP; try { localStorage.setItem("pulse-box", S.box); } catch {} render(); $("bxPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
     if (el.id === "bfClear") { S.bf = {}; try { localStorage.removeItem("pulse-bf"); } catch {} render(); return; }
     if (el.matches("[data-more]")) { S.more[el.dataset.more] = (S.more[el.dataset.more] || TILE_STEP) + TILE_STEP; render(); return; }
@@ -988,7 +1021,7 @@
     if (el.matches("[data-restore]")) { if (await team("restore", { email: el.dataset.restore })) toast("Access restored"); return; }
     if (el.matches("[data-open]")) { if (e.target.closest("a,button:not(.card),input,select")) return; openDrawer(el.dataset.open); }
   });
-  const markSelf = (e) => { const t = e.target; if (!t.closest || !t.closest("#drawerRoot") || t.closest("[data-drefresh],[data-close]")) return;
+  const markSelf = (e) => { const t = e.target; if (!t.closest || !t.closest("#drawerRoot") || t.closest("[data-drefresh],[data-close],[data-dtab],[data-tl-all]")) return;
     if (e.type === "submit" || (e.type === "change" && t.matches("select")) || (e.type === "click" && t.closest("button"))) S.drawerSelf = Date.now(); };
   ["submit", "change", "click"].forEach((ev) => document.addEventListener(ev, markSelf, true));
   document.addEventListener("change", (e) => {
