@@ -121,7 +121,7 @@
         fetchAll("crm_followups", "*"),
         sb.from("crm_team").select("*").order("created_at").then((r) => r.data || []),
         sb.from("crm_sync_log").select("*").order("started_at", { ascending: false }).limit(12).then((r) => r.data || []),
-        fetchAll("crm_leads", "*", "created_at"),
+        fetchAll("crm_leads", "*", "created_at").then((r) => r.filter((x) => !x.hidden)),
         sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14).then((r) => r.data || []),
       ]);
       if (S.loaded) {
@@ -147,7 +147,7 @@
       followups: () => fetchAll("crm_followups", "*"),
       sync: () => sb.from("crm_sync_log").select("*").order("started_at", { ascending: false }).limit(12).then((r) => r.data || []),
       team: () => sb.from("crm_team").select("*").order("created_at").then((r) => r.data || []),
-      leads: () => fetchAll("crm_leads", "*", "created_at"),
+      leads: () => fetchAll("crm_leads", "*", "created_at").then((r) => r.filter((x) => !x.hidden)),
     };
     S.raw[which] = await map[which]();
     if (which === "sync") syncStatus();
@@ -368,7 +368,7 @@
     const shown = S.more[id] || TILE_STEP;
     const cards = items.slice(0, shown).map((it) => {
       const p = it.p, st = starsFor(it.at), name = p ? p.name : it.name || "Guest";
-      const own = p && p.owner ? memberName(p.owner) : "";
+      const ownE = it.owner !== undefined ? it.owner : p?.owner || ""; const own = ownE ? memberName(ownE) : "";
       const kv = (p ? [["Phone", p.phone], ["City", p.city], ["From", p.came]] : []).concat(it.kv || []).filter((r) => r[1]);
       return `<article class="tile"${p ? ` data-open="${p.key}"` : ""}>
         <div class="t-top"><span class="av">${esc(initials(name))}</span><div class="t-who"><b class="t-name">${esc(name)}</b>${starHtml(st)}</div></div>
@@ -379,6 +379,7 @@
         <div class="t-owner${own ? " on" : ""}"><span>Owner</span><b>${own ? esc(own) : "Null"}</b></div>
         <div class="t-when">${fmtDT(it.at)} · ${ago(it.at)}</div>
         ${p ? `<div class="t-acts">${actions(p, !!it.link)}</div>` : ""}
+        ${it.lead && canWrite() ? `<div class="t-lead"><select class="inp" data-lead-owner="${esc(it.leadKey)}" aria-label="Who is handling this enquiry">${teamOptions(it.owner).replace(">Nobody<", ">Take this lead…<")}</select><button class="btn small" type="button" data-lead-done="${esc(it.leadKey)}" data-v="${it.lead.done_at ? "0" : "1"}">${it.lead.done_at ? "Reopen" : "Mark done"}</button></div>` : ""}
         ${it.leadKey && isAdmin() ? `<button class="btn small t-del" type="button" data-del-lead="${esc(it.leadKey)}">Delete enquiry</button>` : ""}
       </article>`;
     }).join("");
@@ -389,7 +390,7 @@
     const items = S.tileData[id] || [];
     if (!items.length) return toast("Nothing to download");
     const rows = items.map((it) => { const p = it.p || {}; const r = { Stars: starsFor(it.at), Name: p.name || it.name || "Guest", Phone: p.phone || "", Email: p.email || "", City: p.city || "", Status: p.statusText || String(it.chip || "").replace(/<[^>]+>/g, ""), "Came from": p.came || "", Date: fmtDT(it.at), Details: String(it.line || "").replace(/<[^>]+>/g, "") };
-      (it.kv || []).forEach(([k, v]) => { r[k] = v; }); if (it.note) r.Note = it.note; r.Owner = p.owner ? memberName(p.owner) : "Null"; return r; });
+      (it.kv || []).forEach(([k, v]) => { r[k] = v; }); if (it.note) r.Note = it.note; r.Owner = (it.owner !== undefined ? it.owner : p.owner) ? memberName(it.owner !== undefined ? it.owner : p.owner) : "Null"; return r; });
     const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
     const q = (v) => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const csv = "﻿" + [cols.join(","), ...rows.map((r) => cols.map((c) => q(r[c])).join(","))].join("\r\n");
@@ -420,6 +421,7 @@
         // Done only counts what happened AFTER this enquiry: a paid order placed after it, or the stage set to Won/Lost after it.
         const doneFor = (p, x) => { const at = t(x.created_at);
           const paidAfter = p.orders.find((o) => !o.cancelled_at && ["PAID", "PARTIALLY_REFUNDED"].includes(o.financial) && t(o.created_at) >= at);
+          if (x.done_at) return "marked done";
           if (paidAfter) return "paid";
           if ((p.stage === "won" || p.stage === "lost") && p.crm?.updated_at && t(p.crm.updated_at) >= at) return STAGE_NAME[p.stage];
           return ""; };
@@ -428,7 +430,7 @@
         const show = S.leadsDone ? done : pend;
         return { id: "leads", label: "Enquiries Leads", value: pend.length, sub: `Pending: ${pend.length} · Done: ${done.length}`, toggle: { done: S.leadsDone, nPend: pend.length, nDone: done.length },
           empty: S.leadsDone ? "No finished enquiries yet." : "No pending enquiries. Leads you add and website forms (rent, donate, demo, contact) appear here.",
-          items: show.map(({ p, x, done: d, why }) => ({ p, leadKey: x.key, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${esc(why)})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
+          items: show.map(({ p, x, done: d, why }) => ({ p, leadKey: x.key, lead: x, owner: x.owner_email || "", at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${esc(why)})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
       })(),
       { id: "browse", label: "Browsing now", sub: "on the store, last 30 min", empty: "Nobody is on the store right now.", items: browseItems() },
       { id: "carts", label: "Live add to cart", sub: S.period.p === "all" ? "last 48 h" : periodLabel(), empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
@@ -441,9 +443,9 @@
   function boxFilter(items) {
     const f = S.bf, from = f.from ? t(f.from) : 0, to = f.to ? t(f.to) : 0;
     return items.filter((it) => {
-      const p = it.p;
-      if (f.owner === "_none" && p && p.owner) return false;
-      if (f.owner && f.owner !== "_none" && (!p || p.owner !== f.owner)) return false;
+      const p = it.p, ow = it.owner !== undefined ? it.owner : p?.owner || "";
+      if (f.owner === "_none" && ow) return false;
+      if (f.owner && f.owner !== "_none" && ow !== f.owner) return false;
       if (!it.at && (from || to || f.day || f.month)) return false;
       const ts = t(it.at), d = new Date(ts + 19800000);
       if (from && ts < from) return false;
@@ -1038,7 +1040,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-ldone],[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
+    const el = e.target.closest("[data-lead-done],[data-ldone],[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -1049,6 +1051,7 @@
     if (el.matches("[data-export-table]")) { const [id, name] = el.dataset.exportTable.split("|"); downloadXlsx(name, tableRows(id)); return; }
     if (el.id === "repMakeNow") { el.disabled = true; el.textContent = "Making…"; const { error } = await sb.functions.invoke("daily-report", { body: { now: true } }); if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch {} toast("Couldn't make the report: " + m); } else { S.raw.reports = (await sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14)).data || []; renderReports(); toast("Report ready"); } return; }
     if (el.id === "tlCopy") { makeLink(); if ($("tlOut").value) copy($("tlOut").value, "Tracking link"); return; }
+    if (el.matches("[data-lead-done]")) { const on = el.dataset.v === "1"; const { error } = await sb.from("crm_leads").update({ done_at: on ? new Date().toISOString() : null }).eq("key", el.dataset.leadDone); if (error) toast("Couldn't save: " + error.message); else { await reload("leads"); render(); toast(on ? "Enquiry marked done" : "Enquiry reopened"); } return; }
     if (el.matches("[data-ldone]")) { S.leadsDone = el.dataset.ldone === "1"; S.more.box = TILE_STEP; render(); return; }
     if (el.matches("[data-cview]")) { S.cv.view = el.dataset.cview; saveCv(); renderContacts(); return; }
     if (el.matches("[data-cmore]")) { S.more.ctable = (S.more.ctable || 50) + 50; renderContacts(); return; }
@@ -1077,6 +1080,7 @@
     if (e.type === "submit" || (e.type === "change" && t.matches("select")) || (e.type === "click" && t.closest("button"))) S.drawerSelf = Date.now(); };
   ["submit", "change", "click"].forEach((ev) => document.addEventListener(ev, markSelf, true));
   document.addEventListener("change", (e) => {
+    if (e.target.dataset && e.target.dataset.leadOwner) { const v = e.target.value || null; sb.from("crm_leads").update({ owner_email: v }).eq("key", e.target.dataset.leadOwner).then(async ({ error }) => { if (error) toast("Couldn't save: " + error.message); else { await reload("leads"); render(); toast(v ? "Enquiry taken by " + memberName(v) : "Enquiry owner cleared"); } }); return; }
     const cm = { cOwner: "owner", cStage: "stage", cSort: "sort" }[e.target.id];
     if (cm) { S.cv[cm] = e.target.value; S.more.ctable = 50; S.more.contacts = 0; saveCv(); renderContacts(); return; }
     const m = { bfOwner: "owner", bfFrom: "from", bfTo: "to", bfDay: "day", bfMonth: "month" }[e.target.id]; if (!m) return;

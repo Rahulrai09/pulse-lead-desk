@@ -299,3 +299,5 @@ button.kpi.on{border-color:var(--navy);background:#F2F6FC;box-shadow:inset 0 -3p
 .t-more-row{display:flex;justify-content:center;margin-top:12px}
 @media (max-width:760px){.ctool-r{margin-left:0}.csel{flex:1 1 45%}}
 .t-del{align-self:flex-start;color:var(--bad);border-color:#F4C7C3}
+.t-lead{display:flex;gap:6px;align-items:center}
+.t-lead .inp{flex:1;height:34px;min-width:0;padding:0 8px;font-size:12.5px}
