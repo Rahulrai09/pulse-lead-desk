@@ -41,7 +41,8 @@
 <section class="prs" id="prs-{{ section.id }}" aria-label="Customer stories">
   <div class="prs__head">
     {%- if section.settings.eyebrow != blank -%}<p class="prs__eyebrow">{{ section.settings.eyebrow }}</p>{%- endif -%}
-    <h2 class="prs__h">{{ section.settings.heading }}</h2>
+    {%- assign prs_words = section.settings.heading | split: ' ' -%}
+    <h2 class="prs__h">{%- if prs_words.size > 1 -%}{%- for w in prs_words -%}{%- if forloop.last -%}<span>{{ w }}</span>{%- else -%}{{ w }} {% endif -%}{%- endfor -%}{%- else -%}{{ section.settings.heading }}{%- endif -%}</h2>
     {%- if section.settings.subheading != blank -%}<p class="prs__sub">{{ section.settings.subheading }}</p>{%- endif -%}
   </div>
   <div class="prs__track" data-prs-track>
@@ -111,8 +112,8 @@
   "name": "Pulse Review Stories",
   "settings": [
     { "type": "paragraph", "content": "Shows the product's \"Review stories\" images (Products → product → Metafields → Review stories). Portrait 9:16 images work best. Hidden on products without any." },
-    { "type": "text", "id": "eyebrow", "label": "Small label above heading (optional)", "default": "" },
-    { "type": "text", "id": "heading", "label": "Heading", "default": "Happy <span>Customers</span>" },
+    { "type": "text", "id": "eyebrow", "label": "Small label above heading (optional)" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Happy Customers", "info": "The last word is shown in orange." },
     { "type": "text", "id": "subheading", "label": "Line below heading", "default": "Real families across India who chose Pulse for more freedom, comfort and independence every day." }
   ],
   "presets": [{ "name": "Pulse Review Stories" }]

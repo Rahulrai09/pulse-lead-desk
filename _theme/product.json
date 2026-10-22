@@ -79,8 +79,7 @@
     "review_stories": {
       "type": "pulse-review-stories",
       "settings": {
-        "eyebrow": "",
-        "heading": "Happy <span>Customers</span>",
+                "heading": "Happy Customers",
         "subheading": "Real families across India who chose Pulse for more freedom, comfort and independence every day."
       }
     },
