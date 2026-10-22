@@ -380,7 +380,6 @@
         <div class="t-when">${fmtDT(it.at)} · ${ago(it.at)}</div>
         ${p ? `<div class="t-acts">${actions(p, !!it.link)}</div>` : ""}
         ${it.lead && canWrite() ? `<div class="t-lead"><select class="inp" data-lead-owner="${esc(it.leadKey)}" aria-label="Who is handling this enquiry">${teamOptions(it.owner).replace(">Nobody<", ">Take this lead…<")}</select><button class="btn small" type="button" data-lead-done="${esc(it.leadKey)}" data-v="${it.lead.done_at ? "0" : "1"}">${it.lead.done_at ? "Reopen" : "Mark done"}</button></div>` : ""}
-        ${it.leadKey && isAdmin() ? `<button class="btn small t-del" type="button" data-del-lead="${esc(it.leadKey)}">Delete enquiry</button>` : ""}
       </article>`;
     }).join("");
     const more = items.length > shown ? `<button class="btn small t-more" type="button" data-more="${id}">View more (${items.length - shown})</button>` : items.length > TILE_STEP ? `<button class="btn small t-more" type="button" data-less="${id}">Show less</button>` : "";
@@ -756,7 +755,7 @@
         <div class="dso">
           <label>Stage<select class="inp" id="dStage" ${ro ? "disabled" : ""}>${STAGES.map(([id, l]) => `<option value="${id}" ${p.stage === id ? "selected" : ""}>${l}</option>`).join("")}</select></label>
           <label>Owner<select class="inp" id="dOwner" ${ro ? "disabled" : ""}>${teamOptions(p.owner).replace(">Nobody<", ">Null (no owner)<")}</select></label>
-          ${p.leads?.length && canWrite() ? `<div class="acts dso-acts"><button class="btn small" type="button" data-edit-lead="${esc(p.leads[0].key)}">Edit lead</button>${isAdmin() && p.source === "lead" ? `<button class="btn small" type="button" data-del-lead="${esc(p.leads[0].key)}">Delete lead</button>` : ""}</div>` : ""}
+          ${p.leads?.length && canWrite() ? `<div class="acts dso-acts"><button class="btn small" type="button" data-edit-lead="${esc(p.leads[0].key)}">Edit lead</button></div>` : ""}
         </div>
         <div class="dtabs">${tabBtn("details", "Details")}${tabBtn("fu", "Follow-ups", openFu.length)}${tabBtn("tl", "Timeline", ev.length)}${ro ? "" : tabBtn("note", "Add note")}</div>
       </div>
