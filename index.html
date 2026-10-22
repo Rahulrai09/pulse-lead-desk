@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=1792654964">
+<link rel="stylesheet" href="styles.css?v=1792655667">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0}</style>
 </head>
 <body>
@@ -78,32 +78,17 @@
 
   <section data-view="overview">
     <div class="kpis" id="kpis"></div>
-    <div class="lboard" style="margin-top:18px">
-      <section class="lcol">
-        <div class="lcol-h"><div><h2>New leads &amp; enquiries</h2><p id="leadsCount">Last 14 days</p></div><span class="lcol-n" id="leadsN">0</span></div>
-        <button class="btn small lcol-csv" type="button" data-csv="leads">Download CSV</button>
-        <div class="lcol-b" id="leadsList"></div>
-      </section>
-      <section class="lcol">
-        <div class="lcol-h"><div><h2>Browsing now</h2><p id="browseCount">Last 30 min</p></div><span class="lcol-n" id="browseN">0</span></div>
-        <button class="btn small lcol-csv" type="button" data-csv="browse">Download CSV</button>
-        <div class="lcol-b" id="browseList"></div>
-      </section>
-      <section class="lcol">
-        <div class="lcol-h"><div><h2>Live add to cart</h2><p id="cartCount">Last 48 h</p></div><span class="lcol-n" id="cartsN">0</span></div>
-        <button class="btn small lcol-csv" type="button" data-csv="carts">Download CSV</button>
-        <div class="lcol-b" id="cartList"></div>
-      </section>
-      <section class="lcol">
-        <div class="lcol-h"><div><h2>Hot leads</h2><p id="hotCount">Unpaid checkouts, 14 days</p></div><span class="lcol-n" id="hotN">0</span></div>
-        <button class="btn small lcol-csv" type="button" data-csv="hot">Download CSV</button>
-        <div class="lcol-b" id="hotList"></div>
-      </section>
-      <section class="lcol">
-        <div class="lcol-h"><div><h2>Fresh sign-ups</h2><p id="freshCount">New accounts, 7 days</p></div><span class="lcol-n" id="freshN">0</span></div>
-        <button class="btn small lcol-csv" type="button" data-csv="fresh">Download CSV</button>
-        <div class="lcol-b" id="freshList"></div>
-      </section>
+    <div class="panel bx" id="bxPanel" style="margin-top:18px">
+      <div class="panel-h"><h2 id="bxTitle"></h2><span class="lcol-n" id="boxN">0</span><p id="bxSub"></p><button class="btn small" type="button" data-csv="box" style="margin-left:auto">Download CSV</button></div>
+      <div class="bx-filters">
+        <label>Owner<select id="bfOwner"></select></label>
+        <label>From<input type="datetime-local" id="bfFrom"></label>
+        <label>To<input type="datetime-local" id="bfTo"></label>
+        <label>Day<select id="bfDay"><option value="">Any day</option><option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></select></label>
+        <label>Month<select id="bfMonth"><option value="">Any month</option><option value="0">January</option><option value="1">February</option><option value="2">March</option><option value="3">April</option><option value="4">May</option><option value="5">June</option><option value="6">July</option><option value="7">August</option><option value="8">September</option><option value="9">October</option><option value="10">November</option><option value="11">December</option></select></label>
+        <button class="btn small" type="button" id="bfClear" hidden>Clear filters</button>
+      </div>
+      <div class="bx-grid" id="bxList"></div>
     </div>
     <div class="two" style="margin-top:18px">
       <div class="panel">
@@ -258,7 +243,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="config.js?v=1792654964"></script>
-<script src="app.js?v=1792654964"></script>
+<script src="config.js?v=1792655667"></script>
+<script src="app.js?v=1792655667"></script>
 </body>
 </html>

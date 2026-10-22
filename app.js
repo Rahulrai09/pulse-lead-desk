@@ -358,7 +358,7 @@
   const STAR_TIP = ["", "4+ days old", "3 days old", "2 days old", "Yesterday", "Today"];
   const starHtml = (n) => `<span class="stars s${n}" title="${STAR_TIP[n]}" aria-label="${n} of 5 stars">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
   const initials = (n) => (String(n || "?").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2) || "?").toUpperCase();
-  const TILE_STEP = 8;
+  const TILE_STEP = 12;
   S.more = S.more || {}; S.tileData = S.tileData || {};
   // One card per person in a board column. it: { p (contact or null), name, chip, at, line, kv, note, link }
   function tiles(id, items, empty) {
@@ -393,28 +393,76 @@
     const q = (v) => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const csv = "﻿" + [cols.join(","), ...rows.map((r) => cols.map((c) => q(r[c])).join(","))].join("\r\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    a.download = `pulse-${id}-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+    a.download = `pulse-${id === "box" ? S.tileName || "list" : id}-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast("CSV downloaded");
   }
   function li(p, sub, link = false) { return `<div class="li"><div class="who" data-open="${p.key}" style="cursor:pointer"><b>${esc(p.name)} ${chip(p)}</b><small>${sub}</small></div>${actions(p, link)}</div>`; }
-  function renderOverview() {
-    renderKpis();
-    renderBrowsing();
-    renderCarts();
+  function boxData() {
+    const C = S.contacts, ck = S.ck;
     const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => S.period.p === "all" ? now() - t(x.created_at) < 14 * DAY : inRange(x.created_at));
-    $("leadsCount").textContent = S.period.p === "all" ? "Last 14 days" : periodLabel();
-    $("leadsList").innerHTML = tiles("leads", L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p && { p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}`, kv: [["Wants", x.interest || ""]], note: x.note || "" }; }).filter(Boolean), "Leads you add and website forms (rent, donate, demo, contact) appear here.");
-    const hot = S.contacts.filter((p) => (p.status === "notconverted" || p.status === "checkout") && now() - t(p.lastCheckout) < 14 * DAY);
-    hot.sort((a, b) => t(b.lastCheckout) - t(a.lastCheckout));
-    $("hotList").innerHTML = tiles("hot", hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` })), "No unconverted checkouts in the last 14 days.");
+    const lastOrder = (p) => p.orders.find((o) => !o.cancelled_at)?.created_at;
+    const byAt = (arr) => arr.sort((a, b) => t(b.at) - t(a.at));
+    const ckP = new Map(); for (const k of ck) { if (now() - t(k.created_at) >= 2 * DAY) continue; const p = byKey(k.customer_id ? "c" + k.customer_id : "g" + k.id); if (p && !ckP.has(p.key)) ckP.set(p.key, { p, at: k.created_at, link: !k.completed_at, line: `<b>${esc(k.items || "Checkout")}</b> · ${inr(k.total)} · ${k.completed_at ? "Completed" : "Not paid yet"}` }); }
+    const hot = C.filter((p) => (p.status === "notconverted" || p.status === "checkout") && now() - t(p.lastCheckout) < 14 * DAY);
+    const fu = allFollowups().filter((f) => !f.done && t(f.due_at) < endOfToday());
+    return [
+      { id: "fresh", label: "Fresh sign-ups", sub: "new accounts, last 7 days", empty: "No new sign-ups this week.", items: byAt(C.filter((p) => p.fresh).map((p) => ({ p, at: p.createdAt, line: `Joined ${fmtDT(p.createdAt)}` }))) },
+      { id: "loggedin", label: "Logged in this week", sub: "customers seen logging in", empty: "No logins this week.", items: byAt(C.filter((p) => p.lastLogin && now() - t(p.lastLogin) < 7 * DAY).map((p) => ({ p, at: p.lastLogin, line: `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days` }))) },
+      { id: "freshck", label: "Fresh checkouts", sub: "started in the last 48 h", empty: "No checkouts in the last 48 hours.", items: byAt([...ckP.values()]) },
+      { id: "converted", label: "Converted", sub: "people who paid", cls: "k-good", empty: "No paid orders yet.", items: byAt(C.filter((p) => p.status === "converted").map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${p.orders.length} order${p.orders.length === 1 ? "" : "s"}</b> · ${inr(p.value)} paid` }))) },
+      { id: "notconverted", label: "Not converted", sub: `${inr(C.filter((p) => p.status === "notconverted").reduce((s, p) => s + p.value, 0))} left in checkout`, cls: "k-bad", empty: "Nobody has left a checkout unpaid.", items: byAt(C.filter((p) => p.status === "notconverted").map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
+      { id: "pending", label: "Pending", sub: "payment pending or to ship", cls: "k-warn", empty: "Nothing pending.", items: byAt(C.filter((p) => p.status === "pending" || p.statusText === "Converted · to ship").map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${esc(p.statusText)}</b> · ${inr(p.value)}` }))) },
+      { id: "due", label: "Due today", sub: "follow-ups due or overdue", cls: fu.length ? "k-warn" : "", empty: "No follow-ups due today.", items: fu.map((f) => { const p = byKey(f.key); return p && { p, at: f.due_at, line: `<b>${esc(f.kind)}</b>${t(f.due_at) < now() ? " · overdue" : ""}`, note: f.note || "", kv: [["Assigned", f.assignee_email ? memberName(f.assignee_email) : ""]] }; }).filter(Boolean) },
+      { id: "total", label: "Total contacts", sub: `${S.raw.customers.length} accounts · ${C.filter((p) => p.leads?.length).length} leads`, empty: "No contacts yet.", items: byAt(C.map((p) => ({ p, at: p.lastActive || p.createdAt, line: `<b>${esc(p.statusText)}</b>${p.value ? " · " + inr(p.value) : ""}` }))) },
+      { id: "leads", label: "New leads & enquiries", sub: S.period.p === "all" ? "last 14 days" : periodLabel(), empty: "Leads you add and website forms (rent, donate, demo, contact) appear here.", items: L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p && { p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}`, kv: [["Wants", x.interest || ""]], note: x.note || "" }; }).filter(Boolean) },
+      { id: "browse", label: "Browsing now", sub: "on the store, last 30 min", empty: "Nobody is on the store right now.", items: browseItems() },
+      { id: "carts", label: "Live add to cart", sub: S.period.p === "all" ? "last 48 h" : periodLabel(), empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
+      { id: "hot", label: "Hot leads", sub: "unpaid checkouts, 14 days", cls: "k-bad", empty: "No unconverted checkouts in the last 14 days.", items: byAt(hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
+    ];
+  }
+  // Box filters: owner, date range (with time), weekday, month.
+  S.bf = (() => { try { return JSON.parse(localStorage.getItem("pulse-bf") || "{}"); } catch { return {}; } })();
+  try { S.box = localStorage.getItem("pulse-box") || "fresh"; } catch { S.box = "fresh"; }
+  function boxFilter(items) {
+    const f = S.bf, from = f.from ? t(f.from) : 0, to = f.to ? t(f.to) : 0;
+    return items.filter((it) => {
+      const p = it.p;
+      if (f.owner === "_none" && p && p.owner) return false;
+      if (f.owner && f.owner !== "_none" && (!p || p.owner !== f.owner)) return false;
+      if (!it.at && (from || to || f.day || f.month)) return false;
+      const ts = t(it.at), d = new Date(ts + 19800000);
+      if (from && ts < from) return false;
+      if (to && ts > to) return false;
+      if (f.day !== undefined && f.day !== "" && d.getUTCDay() !== +f.day) return false;
+      if (f.month !== undefined && f.month !== "" && d.getUTCMonth() !== +f.month) return false;
+      return true;
+    });
+  }
+  function renderBoxFilters() {
+    const o = $("bfOwner"); if (!o) return;
+    const opts = `<option value="">Everyone</option><option value="_none">Null (no owner)</option>` + S.raw.team.filter((m) => m.active).map((m) => `<option value="${esc(m.email)}">${esc(m.name || m.email)}</option>`).join("");
+    if (o.dataset.opts !== opts) { o.innerHTML = opts; o.dataset.opts = opts; }
+    o.value = S.bf.owner || ""; $("bfFrom").value = S.bf.from || ""; $("bfTo").value = S.bf.to || ""; $("bfDay").value = S.bf.day ?? ""; $("bfMonth").value = S.bf.month ?? "";
+    const on = Object.values(S.bf).some((v) => v !== "" && v != null);
+    $("bfClear").hidden = !on;
+  }
+  function renderOverview() {
+    const boxes = boxData();
+    if (!boxes.some((b) => b.id === S.box)) S.box = boxes[0].id;
+    $("kpis").innerHTML = boxes.map((b) => `<button type="button" class="kpi ${b.cls || ""}${b.id === S.box ? " on" : ""}" data-box="${b.id}" aria-pressed="${b.id === S.box}"><span class="l">${esc(b.label)}</span><span class="v num">${b.items.length}</span><span class="s">${esc(b.sub)}</span></button>`).join("");
+    const cur = boxes.find((b) => b.id === S.box);
+    renderBoxFilters();
+    const items = boxFilter(cur.items);
+    $("bxTitle").textContent = cur.label;
+    $("bxSub").textContent = items.length === cur.items.length ? cur.sub : `${items.length} of ${cur.items.length} match your filters · ${cur.sub}`;
+    $("bxList").innerHTML = tiles("box", items, items.length || !cur.items.length ? cur.empty : "Nobody matches these filters.");
+    S.tileName = cur.id;
     const C = S.contacts;
     const steps = [["Contacts", C.length], ["Signed up", C.filter((p) => p.source === "customer").length], ["Started checkout", C.filter((p) => p.checkouts.length).length], ["Converted", C.filter((p) => p.status === "converted").length]];
     const max = Math.max(1, steps[0][1]);
     $("funnel").innerHTML = steps.map(([l, n]) => `<div class="frow"><span class="lab">${l}</span><span class="bar"><i style="width:${Math.max(1, (n / max) * 100)}%"></i></span><span class="n num">${n}</span></div>`).join("");
     const due = allFollowups().filter((f) => !f.done && t(f.due_at) < endOfToday() + 2 * DAY).slice(0, 6);
     $("dueList").innerHTML = due.length ? due.map(fuRow).join("") : `<div class="empty">Nothing due in the next 2 days.</div>`;
-    const fresh = C.filter((p) => p.fresh).sort((a, b) => t(b.createdAt) - t(a.createdAt));
-    $("freshList").innerHTML = tiles("fresh", fresh.map((p) => ({ p, at: p.createdAt, line: `Joined ${fmtDT(p.createdAt)}` })), "No new sign-ups this week.");
     const logins = C.filter((p) => p.lastLogin).sort((a, b) => t(b.lastLogin) - t(a.lastLogin));
     $("loginList").innerHTML = logins.length ? logins.slice(0, 8).map((p) => li(p, `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days`)).join("") : `<div class="empty">Logins appear here once the store's login tracking is live.</div>`;
   }
@@ -467,7 +515,7 @@
     if (path.startsWith("/search")) return "Search";
     return title(path.replace(/^\//, ""));
   }
-  function renderBrowsing() {
+  function browseItems() {
     const since = now() - 30 * 60e3, byP = new Map();
     for (const e of S.raw.events) {
       if (t(e.created_at) < since) continue; const c = evPerson(e);
@@ -477,23 +525,21 @@
     }
     const rows = [...byP.values()].sort((a, b) => (a.c.startsWith("v:") - b.c.startsWith("v:")) || t(b.last.created_at) - t(a.last.created_at));
     const named = rows.filter((r) => !r.c.startsWith("v:")).length;
-    $("browseCount").textContent = rows.length ? `${named} logged in · ${rows.length - named} guests · 30 min` : "Last 30 min";
-    $("browseList").innerHTML = tiles("browse", rows.map((r) => {
+    return rows.map((r) => {
       const p = r.c.startsWith("v:") ? null : byKey("c" + r.c);
       const what = r.last.kind === "view" ? "Looking at <b>" + esc(r.last.meta?.t || "a product") + "</b>" : r.last.kind === "search" ? `Searched “${esc(r.last.meta?.t || "")}”` : r.last.kind === "cart" ? "Added to cart · <b>" + esc(r.last.meta?.t || "") + "</b>" : r.last.kind === "checkout" ? "<b>On the payment page</b>" : r.last.kind === "login" ? "Just logged in" : "Viewing " + esc(pageName(r.last.path, r.last.meta));
       return { p, name: p ? "" : "Guest " + r.c.slice(-4).toUpperCase(), chip: p ? "" : '<span class="chip c-signup">Guest · not logged in</span>', at: r.last.created_at, line: `<span style="color:var(--good)">● </span>${what}`, kv: [["Pages", String(r.pages.size)], ["Device", r.last.device || ""]] };
-    }), "Nobody is on the store right now.");
+    });
   }
-  function renderCarts() {
+  function cartItems() {
     const evs = cartFeed();
     const people = new Set(evs.map(evPerson)).size, nCart = evs.filter((e) => e.kind === "cart" || e.added).length, nCk = evs.filter((e) => e.kind === "checkout").length;
-    $("cartCount").textContent = (evs.length ? `${nCart} carts · ${nCk} checkouts · ` : "") + (S.period.p === "all" ? "48 h" : periodLabel());
-    $("cartList").innerHTML = tiles("carts", evs.slice(0, 200).map((ev) => {
+    return evs.slice(0, 300).map((ev) => {
       const m = ev.meta || {}, w = cartWho(ev);
       const what = ev.kind === "checkout" ? `<b>Started checkout</b>${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}` : `Added <b>${esc(m.t || "a product")}</b>${m.q > 1 ? " ×" + m.q : ""}${m.a ? " · " + inr(m.a * (m.q || 1)) : ""}`;
       const cls = w.tag.startsWith("Guest") ? "c-signup" : w.tag.startsWith("New") ? "c-checkout" : "c-converted";
       return { p: w.p, name: w.name, chip: `<span class="chip ${cls}">${esc(w.tag)}</span>`, at: ev.created_at, line: what, link: ev.kind === "checkout", kv: w.p ? [] : [["Contact", m.ph || m.em || ""], ["Device", ev.device || ""]] };
-    }), "Add-to-cart activity appears here the moment someone adds a wheelchair to their cart.");
+    });
   }
 
   const C_FILTERS = [["all", "All"], ["leads", "Leads"], ["fresh", "Fresh sign-ups"], ["loggedin", "Logged in (7 d)"], ["checkout", "In checkout"], ["notconverted", "Not converted"], ["pending", "Pending"], ["converted", "Converted"], ["signup", "Signed up only"], ["mine", "Mine"], ["followup", "Has follow-up"]];
@@ -913,7 +959,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
+    const el = e.target.closest("[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -924,6 +970,8 @@
     if (el.matches("[data-export-table]")) { const [id, name] = el.dataset.exportTable.split("|"); downloadXlsx(name, tableRows(id)); return; }
     if (el.id === "repMakeNow") { el.disabled = true; el.textContent = "Making…"; const { error } = await sb.functions.invoke("daily-report", { body: { now: true } }); if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch {} toast("Couldn't make the report: " + m); } else { S.raw.reports = (await sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14)).data || []; renderReports(); toast("Report ready"); } return; }
     if (el.id === "tlCopy") { makeLink(); if ($("tlOut").value) copy($("tlOut").value, "Tracking link"); return; }
+    if (el.matches("[data-box]")) { S.box = el.dataset.box; S.more.box = TILE_STEP; try { localStorage.setItem("pulse-box", S.box); } catch {} render(); $("bxPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    if (el.id === "bfClear") { S.bf = {}; try { localStorage.removeItem("pulse-bf"); } catch {} render(); return; }
     if (el.matches("[data-more]")) { S.more[el.dataset.more] = (S.more[el.dataset.more] || TILE_STEP) + TILE_STEP; render(); return; }
     if (el.matches("[data-less]")) { S.more[el.dataset.less] = TILE_STEP; render(); return; }
     if (el.matches("[data-csv]")) { downloadCsv(el.dataset.csv); return; }
@@ -943,6 +991,10 @@
   const markSelf = (e) => { const t = e.target; if (!t.closest || !t.closest("#drawerRoot") || t.closest("[data-drefresh],[data-close]")) return;
     if (e.type === "submit" || (e.type === "change" && t.matches("select")) || (e.type === "click" && t.closest("button"))) S.drawerSelf = Date.now(); };
   ["submit", "change", "click"].forEach((ev) => document.addEventListener(ev, markSelf, true));
+  document.addEventListener("change", (e) => {
+    const m = { bfOwner: "owner", bfFrom: "from", bfTo: "to", bfDay: "day", bfMonth: "month" }[e.target.id]; if (!m) return;
+    S.bf[m] = e.target.value; S.more.box = TILE_STEP; try { localStorage.setItem("pulse-bf", JSON.stringify(S.bf)); } catch {} render();
+  });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("modalRoot").innerHTML) $("modalRoot").innerHTML = ""; else if (S.open) closeDrawer(); } });
   document.addEventListener("change", async (e) => {
     const el = e.target;
