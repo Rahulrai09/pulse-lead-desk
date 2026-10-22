@@ -379,6 +379,7 @@
         <div class="t-owner${own ? " on" : ""}"><span>Owner</span><b>${own ? esc(own) : "Null"}</b></div>
         <div class="t-when">${fmtDT(it.at)} · ${ago(it.at)}</div>
         ${p ? `<div class="t-acts">${actions(p, !!it.link)}</div>` : ""}
+        ${it.leadKey && isAdmin() ? `<button class="btn small t-del" type="button" data-del-lead="${esc(it.leadKey)}">Delete enquiry</button>` : ""}
       </article>`;
     }).join("");
     const more = items.length > shown ? `<button class="btn small t-more" type="button" data-more="${id}">View more (${items.length - shown})</button>` : items.length > TILE_STEP ? `<button class="btn small t-more" type="button" data-less="${id}">Show less</button>` : "";
@@ -427,7 +428,7 @@
         const show = S.leadsDone ? done : pend;
         return { id: "leads", label: "Enquiries Leads", value: pend.length, sub: `Pending: ${pend.length} · Done: ${done.length}`, toggle: { done: S.leadsDone, nPend: pend.length, nDone: done.length },
           empty: S.leadsDone ? "No finished enquiries yet." : "No pending enquiries. Leads you add and website forms (rent, donate, demo, contact) appear here.",
-          items: show.map(({ p, x, done: d, why }) => ({ p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${esc(why)})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
+          items: show.map(({ p, x, done: d, why }) => ({ p, leadKey: x.key, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${esc(why)})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
       })(),
       { id: "browse", label: "Browsing now", sub: "on the store, last 30 min", empty: "Nobody is on the store right now.", items: browseItems() },
       { id: "carts", label: "Live add to cart", sub: S.period.p === "all" ? "last 48 h" : periodLabel(), empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
