@@ -350,16 +350,60 @@
     ];
     $("kpis").innerHTML = k.map(([l, v, s, cls, go]) => `<button type="button" class="kpi ${cls}" data-go="${go}"><span class="l">${l}</span><span class="v num">${v}</span><span class="s">${esc(s)}</span></button>`).join("");
   }
+
+  /* ---------- Tiles: tall cards with stars by freshness, "View more" and CSV ---------- */
+  // Stars by calendar day (India time): today 5, yesterday 4, day before 3, 3 days ago 2, older 1.
+  const istDay = (d) => Math.floor((t(d) + 19800000) / DAY);
+  function starsFor(d) { if (!d) return 1; const age = istDay(new Date()) - istDay(d); return Math.max(1, Math.min(5, 5 - age)); }
+  const STAR_TIP = ["", "4+ days old", "3 days old", "2 days old", "Yesterday", "Today"];
+  const starHtml = (n) => `<span class="stars s${n}" title="${STAR_TIP[n]}" aria-label="${n} of 5 stars">${"★".repeat(n)}<i>${"★".repeat(5 - n)}</i></span>`;
+  const initials = (n) => (String(n || "?").trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2) || "?").toUpperCase();
+  const TILE_STEP = 6;
+  S.more = S.more || {}; S.tileData = S.tileData || {};
+  function tiles(id, items, empty) {
+    S.tileData[id] = items;
+    if (!items.length) return `<div class="empty">${empty}</div>`;
+    const shown = S.more[id] || TILE_STEP;
+    const cards = items.slice(0, shown).map((it) => {
+      const p = it.p, st = starsFor(it.at);
+      const kv = [["Phone", p.phone], ["Email", p.email], ["City", p.city], ["Came from", p.came], ...(it.kv || [])].filter((r) => r[1]);
+      return `<article class="tile" data-open="${p.key}">
+        <div class="t-top"><span class="av">${esc(initials(p.name))}</span>${starHtml(st)}</div>
+        <b class="t-name">${esc(p.name)}</b>
+        <div class="t-chips">${chip(p)}${it.tag ? `<span class="chip c-signup">${esc(it.tag)}</span>` : ""}</div>
+        <p class="t-line">${it.line}</p>
+        <dl class="t-kv">${kv.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
+        ${it.note ? `<p class="t-note">${esc(it.note)}</p>` : ""}
+        <div class="t-when">${fmtDT(it.at)} · ${ago(it.at)}</div>
+        <div class="t-acts">${actions(p, !!it.link)}</div>
+      </article>`;
+    }).join("");
+    const more = items.length > shown ? `<div class="t-more"><button class="btn small" type="button" data-more="${id}">View more (${items.length - shown} more)</button></div>` : items.length > TILE_STEP ? `<div class="t-more"><button class="btn small" type="button" data-less="${id}">Show less</button></div>` : "";
+    return `<div class="tiles">${cards}</div>${more}`;
+  }
+  function downloadCsv(id) {
+    const items = S.tileData[id] || [];
+    if (!items.length) return toast("Nothing to download");
+    const rows = items.map((it) => { const p = it.p; const r = { Stars: starsFor(it.at), Name: p.name, Phone: p.phone, Email: p.email, City: p.city, Status: p.statusText, "Came from": p.came, Date: fmtDT(it.at), Details: String(it.line || "").replace(/<[^>]+>/g, "") };
+      (it.kv || []).forEach(([k, v]) => { r[k] = v; }); if (it.note) r.Note = it.note; r.Owner = p.owner ? memberName(p.owner) : ""; return r; });
+    const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+    const q = (v) => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const csv = "﻿" + [cols.join(","), ...rows.map((r) => cols.map((c) => q(r[c])).join(","))].join("\r\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `pulse-${id}-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast("CSV downloaded");
+  }
   function li(p, sub, link = false) { return `<div class="li"><div class="who" data-open="${p.key}" style="cursor:pointer"><b>${esc(p.name)} ${chip(p)}</b><small>${sub}</small></div>${actions(p, link)}</div>`; }
   function renderOverview() {
     renderKpis();
     renderBrowsing();
     renderCarts();
-    const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => S.period.p === "all" ? now() - t(x.created_at) < 14 * DAY : inRange(x.created_at)).slice(0, 10);
+    const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => S.period.p === "all" ? now() - t(x.created_at) < 14 * DAY : inRange(x.created_at));
     $("leadsCount").textContent = L.length ? `${L.length} in the ${S.period.p === "all" ? "last 14 days" : periodLabel()}` : "";
-    $("leadsList").innerHTML = L.length ? L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p ? li(p, `<b>${esc(x.kind)}</b> · ${esc(x.source)} · ${ago(x.created_at)}${x.note ? " · " + esc(x.note.split("\n")[0].slice(0, 80)) : ""}`) : ""; }).join("") : `<div class="empty">Leads you add and website forms (rent, donate, demo, contact) appear here.</div>`;
+    $("leadsList").innerHTML = tiles("leads", L.map((x) => { const p = S.contacts.find((c) => c.leads?.some((y) => y.key === x.key)); return p && { p, at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}`, kv: [["Interested in", x.interest || ""], ["Owner", p.owner ? memberName(p.owner) : ""]], note: x.note || "" }; }).filter(Boolean), "Leads you add and website forms (rent, donate, demo, contact) appear here.");
     const hot = S.contacts.filter((p) => (p.status === "notconverted" || p.status === "checkout") && now() - t(p.lastCheckout) < 14 * DAY);
-    $("hotList").innerHTML = hot.length ? hot.slice(0, 10).map((p) => li(p, `${esc(p.cart || "Checkout")} · ${inr(p.value)} · ${ago(p.lastCheckout)}${p.owner ? " · " + esc(memberName(p.owner)) : ""}`, true)).join("") : `<div class="empty">No unconverted checkouts in the last 14 days.</div>`;
+    hot.sort((a, b) => t(b.lastCheckout) - t(a.lastCheckout));
+    $("hotList").innerHTML = tiles("hot", hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}`, kv: [["Owner", p.owner ? memberName(p.owner) : ""]] })), "No unconverted checkouts in the last 14 days.");
     const C = S.contacts;
     const steps = [["Contacts", C.length], ["Signed up", C.filter((p) => p.source === "customer").length], ["Started checkout", C.filter((p) => p.checkouts.length).length], ["Converted", C.filter((p) => p.status === "converted").length]];
     const max = Math.max(1, steps[0][1]);
@@ -367,9 +411,9 @@
     const due = allFollowups().filter((f) => !f.done && t(f.due_at) < endOfToday() + 2 * DAY).slice(0, 6);
     $("dueList").innerHTML = due.length ? due.map(fuRow).join("") : `<div class="empty">Nothing due in the next 2 days.</div>`;
     const fresh = C.filter((p) => p.fresh).sort((a, b) => t(b.createdAt) - t(a.createdAt));
-    $("freshList").innerHTML = fresh.length ? fresh.map((p) => li(p, `Joined ${fmtDT(p.createdAt)}${p.city ? " · " + esc(p.city) : ""}`)).join("") : `<div class="empty">No new sign-ups this week.</div>`;
-    const logins = C.filter((p) => p.lastLogin).sort((a, b) => t(b.lastLogin) - t(a.lastLogin)).slice(0, 8);
-    $("loginList").innerHTML = logins.length ? logins.map((p) => li(p, `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days`)).join("") : `<div class="empty">Logins appear here once the store's login tracking is live.</div>`;
+    $("freshList").innerHTML = tiles("fresh", fresh.map((p) => ({ p, at: p.createdAt, line: `Joined ${fmtDT(p.createdAt)}` })), "No new sign-ups this week.");
+    const logins = C.filter((p) => p.lastLogin).sort((a, b) => t(b.lastLogin) - t(a.lastLogin));
+    $("loginList").innerHTML = tiles("logins", logins.map((p) => ({ p, at: p.lastLogin, line: `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days` })), "Logins appear here once the store's login tracking is live.");
   }
 
   function cartWho(ev) {
@@ -863,7 +907,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
+    const el = e.target.closest("[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -874,6 +918,9 @@
     if (el.matches("[data-export-table]")) { const [id, name] = el.dataset.exportTable.split("|"); downloadXlsx(name, tableRows(id)); return; }
     if (el.id === "repMakeNow") { el.disabled = true; el.textContent = "Making…"; const { error } = await sb.functions.invoke("daily-report", { body: { now: true } }); if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch {} toast("Couldn't make the report: " + m); } else { S.raw.reports = (await sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14)).data || []; renderReports(); toast("Report ready"); } return; }
     if (el.id === "tlCopy") { makeLink(); if ($("tlOut").value) copy($("tlOut").value, "Tracking link"); return; }
+    if (el.matches("[data-more]")) { S.more[el.dataset.more] = (S.more[el.dataset.more] || TILE_STEP) + TILE_STEP; render(); return; }
+    if (el.matches("[data-less]")) { S.more[el.dataset.less] = TILE_STEP; render(); return; }
+    if (el.matches("[data-csv]")) { downloadCsv(el.dataset.csv); return; }
     if (el.matches("[data-drefresh]")) { const sc = document.querySelector("#drawerRoot .db"); const top = sc ? sc.scrollTop : 0; renderDrawer(); const sc2 = document.querySelector("#drawerRoot .db"); if (sc2) sc2.scrollTop = top; toast("Contact refreshed"); return; }
     if (el.matches("[data-close]")) { closeDrawer(); return; }
     if (el.matches(".tab")) { setView(el.dataset.v); return; }
