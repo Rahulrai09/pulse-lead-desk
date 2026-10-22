@@ -272,3 +272,29 @@ button.kpi.on{border-color:var(--navy);background:#F2F6FC;box-shadow:inset 0 -3p
 .dnote{padding:9px 0;border-top:1px solid var(--line)}.dnote:first-of-type{border-top:0}
 .dnote small{margin-left:8px;color:var(--muted);font-size:11.5px}.dnote p{margin:4px 0 0;font-size:13px;white-space:pre-wrap}
 @media (max-width:600px){.dstats{grid-template-columns:repeat(2,minmax(0,1fr))}.dso{grid-template-columns:1fr}.dh .row .acts{flex-direction:column}}
+/* Contacts */
+.ctool{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ctool .search{flex:1 1 260px;min-width:200px}
+.csel{height:40px;width:auto;min-width:150px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{padding:8px 14px;border:0;background:var(--panel);font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--navy);color:#fff}
+.ctool-r{display:flex;gap:8px;margin-left:auto}
+.cchips{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0}
+.cchips-l{display:flex;flex-wrap:wrap;gap:8px;flex:1}
+.cchips .muted{font-size:13px;font-weight:600}
+.ctable thead th{position:sticky;top:0;z-index:1}
+.ctable th button{padding:0;border:0;background:none;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}
+.ctable th button:hover{color:var(--navy);text-decoration:underline}
+.ctable tbody tr{cursor:pointer}
+.ctable tbody tr:hover td{background:#F6F8FC}
+.c-who{display:flex;align-items:center;gap:10px}
+.c-who .av{width:34px;height:34px;font-size:12px}
+.c-who .stars{font-size:12px;margin-left:4px;vertical-align:1px}
+.own{display:inline-block;white-space:nowrap;padding:3px 9px;border-radius:999px;background:#F3F4F6;color:#9AA3AF;font-size:12px;font-weight:700}
+.own.on{background:#E7F7EE;color:#15803D}
+.stage{display:inline-block;white-space:nowrap;padding:3px 9px;border-radius:999px;background:#EEF2F8;font-size:12px;font-weight:700;color:var(--navy)}
+.stage.st-won{background:#E7F7EE;color:#15803D}.stage.st-lost{background:#FDECEC;color:#B42318}.stage.st-demo{background:#FFF4E5;color:#B45309}.stage.st-interested{background:#EAF2FF;color:#1D4ED8}
+.fu-next{font-size:12.5px}
+.t-more-row{display:flex;justify-content:center;margin-top:12px}
+@media (max-width:760px){.ctool-r{margin-left:0}.csel{flex:1 1 45%}}

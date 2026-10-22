@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="styles.css?v=1792655834">
+<link rel="stylesheet" href="styles.css?v=1792656031">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} body{margin:0}</style>
 </head>
 <body>
@@ -106,14 +106,21 @@
 
   <section data-view="contacts" hidden>
     <div class="panel">
-      <div class="filters" id="cFilters">
+      <div class="filters ctool" id="cFilters">
         <input class="search" id="cSearch" type="search" placeholder="Search name, phone, email, city, source" aria-label="Search contacts">
-        <button class="btn small" type="button" data-export="contacts">Download Excel</button>
+        <select class="inp csel" id="cOwner" aria-label="Owner"></select>
+        <select class="inp csel" id="cStage" aria-label="Stage"></select>
+        <select class="inp csel" id="cSort" aria-label="Sort"></select>
+        <div class="seg" role="group" aria-label="View"><button type="button" data-cview="table" aria-pressed="true">Table</button><button type="button" data-cview="tiles" aria-pressed="false">Tiles</button></div>
+        <div class="ctool-r"><button class="btn small" type="button" data-csv="contacts">Download CSV</button><button class="btn small" type="button" data-export="contacts">Download Excel</button></div>
       </div>
-      <div class="tablebox"><table>
-        <thead><tr><th>Contact</th><th>Status</th><th>Stage</th><th>Signed up</th><th>Last login</th><th>Last checkout</th><th>Value</th><th>Owner</th><th>Next follow-up</th></tr></thead>
+      <div class="cchips"><div id="cChips" class="cchips-l"></div><span class="muted" id="cCount"></span></div>
+      <div class="bx-grid" id="cTiles" hidden></div>
+      <div class="tablebox" id="cTable"><table class="ctable">
+        <thead><tr><th><button type="button" data-csort="name">Contact</button></th><th>Status</th><th>Stage</th><th><button type="button" data-csort="signup">Signed up</button></th><th><button type="button" data-csort="active">Last login</button></th><th><button type="button" data-csort="checkout">Last checkout</button></th><th><button type="button" data-csort="value">Value</button></th><th>Owner</th><th><button type="button" data-csort="fu">Next follow-up</button></th></tr></thead>
         <tbody id="cBody"></tbody>
       </table></div>
+      <div class="t-more-row" id="cMore"></div>
     </div>
   </section>
 
@@ -243,7 +250,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="config.js?v=1792655834"></script>
-<script src="app.js?v=1792655834"></script>
+<script src="config.js?v=1792656031"></script>
+<script src="app.js?v=1792656031"></script>
 </body>
 </html>

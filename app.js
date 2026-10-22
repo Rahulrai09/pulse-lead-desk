@@ -557,20 +557,52 @@
       return true;
     });
   }
+  // Contacts: search + chips + owner/stage filter, sort, table or tiles, View more, CSV.
+  S.cv = (() => { try { return JSON.parse(localStorage.getItem("pulse-cv") || "{}"); } catch { return {}; } })();
+  const saveCv = () => { try { localStorage.setItem("pulse-cv", JSON.stringify(S.cv)); } catch {} };
+  const C_SORTS = [["active", "Last active"], ["stars", "Freshest (stars)"], ["signup", "Newest sign-up"], ["checkout", "Latest checkout"], ["value", "Value: high to low"], ["name", "Name A–Z"], ["fu", "Next follow-up"]];
+  function contactRows() {
+    const cv = S.cv;
+    let rows = filterContacts(S.cFilter, S.search);
+    if (cv.owner === "_none") rows = rows.filter((p) => !p.owner); else if (cv.owner) rows = rows.filter((p) => p.owner === cv.owner);
+    if (cv.stage) rows = rows.filter((p) => p.stage === cv.stage);
+    const k = cv.sort || "active", T = (d) => (d ? t(d) : 0);
+    const cmp = { active: (a, b) => T(b.lastActive) - T(a.lastActive), stars: (a, b) => starsFor(b.lastActive || b.createdAt) - starsFor(a.lastActive || a.createdAt) || T(b.lastActive) - T(a.lastActive), signup: (a, b) => T(b.createdAt) - T(a.createdAt), checkout: (a, b) => T(b.lastCheckout) - T(a.lastCheckout), value: (a, b) => (b.value || 0) - (a.value || 0), name: (a, b) => String(a.name).localeCompare(String(b.name)), fu: (a, b) => (a.nextFU ? T(a.nextFU.due_at) : 9e15) - (b.nextFU ? T(b.nextFU.due_at) : 9e15) }[k];
+    return rows.slice().sort(cmp);
+  }
   function renderContacts() {
+    const cv = S.cv;
     $("cFilters").querySelectorAll(".fchip").forEach((b) => b.remove());
-    $("cFilters").insertAdjacentHTML("beforeend", C_FILTERS.map(([v, l]) => `<button class="fchip" type="button" data-cf="${v}" aria-pressed="${S.cFilter === v}">${l} <span class="num">${filterContacts(v, "").length}</span></button>`).join(""));
-    const rows = filterContacts(S.cFilter, S.search);
-    $("cBody").innerHTML = rows.length ? rows.slice(0, 500).map((p) => `<tr data-open="${p.key}">
-      <td><b>${esc(p.name)}</b><span class="sub">${esc(p.phone || p.email || "No contact details")}${p.city ? " · " + esc(p.city) : ""}${p.came ? " · from " + esc(p.came) : ""}</span></td>
+    $("cChips").innerHTML = C_FILTERS.map(([v, l]) => `<button class="fchip" type="button" data-cf="${v}" aria-pressed="${S.cFilter === v}">${l} <span class="num">${filterContacts(v, "").length}</span></button>`).join("");
+    const o = $("cOwner"), opts = `<option value="">Owner: everyone</option><option value="_none">Owner: Null</option>` + S.raw.team.filter((m) => m.active).map((m) => `<option value="${esc(m.email)}">Owner: ${esc(m.name || m.email)}</option>`).join("");
+    if (o.dataset.opts !== opts) { o.innerHTML = opts; o.dataset.opts = opts; }
+    o.value = cv.owner || "";
+    const st = $("cStage"); if (!st.options.length) st.innerHTML = `<option value="">Stage: all</option>` + STAGES.map(([id, l]) => `<option value="${id}">Stage: ${l}</option>`).join("");
+    st.value = cv.stage || "";
+    const so = $("cSort"); if (!so.options.length) so.innerHTML = C_SORTS.map(([v, l]) => `<option value="${v}">Sort: ${l}</option>`).join("");
+    so.value = cv.sort || "active";
+    const tilesView = cv.view === "tiles";
+    document.querySelectorAll("[data-cview]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.cview === "tiles") === tilesView)));
+    const rows = contactRows();
+    const total = filterContacts(S.cFilter, S.search).length;
+    $("cCount").textContent = rows.length === total ? `${rows.length} contact${rows.length === 1 ? "" : "s"}` : `${rows.length} of ${total} contacts`;
+    const items = rows.map((p) => ({ p, at: p.lastActive || p.createdAt, line: `<b>${esc(p.statusText)}</b> · ${esc(STAGE_NAME[p.stage])}${p.value ? " · " + inr(p.value) : ""}`, kv: [["Wants", p.cart || ""], ["Next follow-up", p.nextFU ? `${p.nextFU.kind} · ${fmtDT(p.nextFU.due_at)}` : ""]] }));
+    $("cTiles").hidden = !tilesView; $("cTable").hidden = tilesView;
+    if (tilesView) { $("cTiles").innerHTML = tiles("contacts", items, "No contacts match."); return; }
+    S.tileData.contacts = items;
+    const shown = S.more.ctable || 50;
+    $("cBody").innerHTML = rows.length ? rows.slice(0, shown).map((p) => { const own = p.owner ? memberName(p.owner) : ""; const fuOver = p.nextFU && t(p.nextFU.due_at) < now();
+      return `<tr data-open="${p.key}">
+      <td><div class="c-who"><span class="av">${esc(initials(p.name))}</span><div><b>${esc(p.name)}</b> ${starHtml(starsFor(p.lastActive || p.createdAt))}<span class="sub">${esc(p.phone || p.email || "No contact details")}${p.city ? " · " + esc(p.city) : ""}${p.came ? " · from " + esc(p.came) : ""}</span></div></div></td>
       <td>${chip(p)}${p.fresh ? ' <span class="chip c-checkout c-new"></span>' : ""}</td>
-      <td><span class="stage">${STAGE_NAME[p.stage]}</span></td>
+      <td><span class="stage st-${p.stage}">${STAGE_NAME[p.stage]}</span></td>
       <td class="d">${p.source === "customer" ? fmtDate(p.createdAt) : p.source === "lead" ? `<span class="sub">Lead · ${fmtDate(p.createdAt)}</span>` : '<span class="sub">Guest</span>'}</td>
       <td class="d">${p.lastLogin ? ago(p.lastLogin) : '<span class="sub">—</span>'}</td>
-      <td class="d">${p.lastCheckout ? ago(p.lastCheckout) : "—"}</td>
-      <td class="d num">${p.value ? inr(p.value) : "—"}</td>
-      <td class="d">${p.owner ? esc(memberName(p.owner)) : '<span class="sub">—</span>'}</td>
-      <td class="d">${p.nextFU ? `<span class="${t(p.nextFU.due_at) < now() ? "chip c-notconverted" : ""}">${esc(p.nextFU.kind)} · ${fmtDT(p.nextFU.due_at)}</span>` : "—"}</td></tr>`).join("") : `<tr><td colspan="9" class="empty">No contacts match.</td></tr>`;
+      <td class="d">${p.lastCheckout ? ago(p.lastCheckout) : '<span class="sub">—</span>'}</td>
+      <td class="d num">${p.value ? inr(p.value) : '<span class="sub">—</span>'}</td>
+      <td class="d"><span class="own${own ? " on" : ""}">${own ? esc(own) : "Null"}</span></td>
+      <td class="d">${p.nextFU ? `<span class="${fuOver ? "chip c-notconverted" : "fu-next"}">${fuOver ? "Overdue · " : ""}${esc(p.nextFU.kind)} · ${fmtDT(p.nextFU.due_at)}</span>` : '<span class="sub">—</span>'}</td></tr>`; }).join("") : `<tr><td colspan="9" class="empty">No contacts match.</td></tr>`;
+    $("cMore").innerHTML = rows.length > shown ? `<button class="btn small" type="button" data-cmore>View more (${rows.length - shown})</button>` : "";
   }
   function renderPipeline() {
     $("board").innerHTML = STAGES.map(([id, label]) => {
@@ -853,7 +885,7 @@
   }
   const xdt = (d) => (d ? new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
   function exportView(v) {
-    if (v === "contacts") return downloadXlsx("Contacts", filterContacts(S.cFilter, S.search).map((p) => ({ Name: p.name, Phone: p.phone, Email: p.email, City: p.city, Status: p.statusText, Stage: STAGE_NAME[p.stage], "Came from": p.came || "Direct / unknown", Campaign: p.camp, "Signed up": p.source === "customer" ? xdt(p.createdAt) : p.source === "lead" ? "Lead" : "Guest", "Last login": xdt(p.lastLogin), "Last checkout": xdt(p.lastCheckout), "Interested in": p.cart, "Value (₹)": Math.round(p.value || 0), Owner: p.owner ? memberName(p.owner) : "", "Next follow-up": p.nextFU ? `${p.nextFU.kind} ${xdt(p.nextFU.due_at)}` : "", "Checkout link": p.recover })));
+    if (v === "contacts") return downloadXlsx("Contacts", contactRows().map((p) => ({ Name: p.name, Phone: p.phone, Email: p.email, City: p.city, Status: p.statusText, Stage: STAGE_NAME[p.stage], "Came from": p.came || "Direct / unknown", Campaign: p.camp, "Signed up": p.source === "customer" ? xdt(p.createdAt) : p.source === "lead" ? "Lead" : "Guest", "Last login": xdt(p.lastLogin), "Last checkout": xdt(p.lastCheckout), "Interested in": p.cart, "Value (₹)": Math.round(p.value || 0), Owner: p.owner ? memberName(p.owner) : "", "Next follow-up": p.nextFU ? `${p.nextFU.kind} ${xdt(p.nextFU.due_at)}` : "", "Checkout link": p.recover })));
     if (v === "checkouts") return downloadXlsx("Checkouts", S.ck.filter((k) => inRange(k.created_at)).map((k) => { const p = byKey(k.customer_id ? "c" + k.customer_id : "g" + k.id); return { Started: xdt(k.created_at), Customer: p?.name || k.name || "Guest", Phone: p?.phone || k.phone || "", Email: p?.email || k.email || "", Wheelchair: k.items, "Value (₹)": Math.round(Number(k.total) || 0), Result: k.completed_at ? "Completed" : k.live ? "On payment page" : "Abandoned", "Checkout link": k.recover_url || "" }; }));
     if (v === "orders") return downloadXlsx("Orders", S.raw.orders.filter((o) => inRange(o.created_at)).map((o) => ({ Order: o.name, Date: xdt(o.created_at), Customer: o.customer_name || "", Phone: o.phone || "", Email: o.email || "", Items: o.items, "Value (₹)": Math.round(Number(o.total) || 0), Payment: (PAY[o.financial] || [0, o.financial])[1], Delivery: o.cancelled_at ? "Cancelled" : o.fulfillment === "FULFILLED" ? "Shipped" : "To ship" })));
     if (v === "schedule") return downloadXlsx("Follow-ups", allFollowups().filter((f) => inRange(f.due_at)).map((f) => { const p = byKey(f.key); return { Due: xdt(f.due_at), Type: f.kind, Contact: p?.name || "", Phone: p?.phone || "", Note: f.note || "", "Assigned to": f.assignee_email ? memberName(f.assignee_email) : "", Done: f.done ? "Yes" : "No" }; }));
@@ -990,7 +1022,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
+    const el = e.target.closest("[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -1001,6 +1033,9 @@
     if (el.matches("[data-export-table]")) { const [id, name] = el.dataset.exportTable.split("|"); downloadXlsx(name, tableRows(id)); return; }
     if (el.id === "repMakeNow") { el.disabled = true; el.textContent = "Making…"; const { error } = await sb.functions.invoke("daily-report", { body: { now: true } }); if (error) { let m = error.message; try { m = (await error.context.json()).error || m; } catch {} toast("Couldn't make the report: " + m); } else { S.raw.reports = (await sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14)).data || []; renderReports(); toast("Report ready"); } return; }
     if (el.id === "tlCopy") { makeLink(); if ($("tlOut").value) copy($("tlOut").value, "Tracking link"); return; }
+    if (el.matches("[data-cview]")) { S.cv.view = el.dataset.cview; saveCv(); renderContacts(); return; }
+    if (el.matches("[data-cmore]")) { S.more.ctable = (S.more.ctable || 50) + 50; renderContacts(); return; }
+    if (el.matches("[data-csort]")) { S.cv.sort = el.dataset.csort; saveCv(); renderContacts(); return; }
     if (el.matches("[data-dtab]")) { S.dTab = el.dataset.dtab; document.querySelectorAll("#drawerRoot .dtab").forEach((b) => b.classList.toggle("on", b === el)); document.querySelectorAll("#drawerRoot .dpane").forEach((x) => { x.hidden = x.dataset.pane !== S.dTab; }); const db = document.querySelector("#drawerRoot .db"); if (db) db.scrollTop = 0; return; }
     if (el.matches("[data-tl-all]")) { document.querySelectorAll("#drawerRoot .tl-x").forEach((x) => x.classList.remove("tl-x")); el.remove(); return; }
     if (el.matches("[data-box]")) { S.box = el.dataset.box; S.more.box = TILE_STEP; try { localStorage.setItem("pulse-box", S.box); } catch {} render(); $("bxPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
@@ -1013,7 +1048,7 @@
     if (el.matches(".tab")) { setView(el.dataset.v); return; }
     if (el.id === "refreshBtn" || el.id === "bannerRetry") { runSync(); return; }
     if (el.matches("[data-go]")) { const [v, f] = el.dataset.go.split(":"); if (f) S.cFilter = f; setView(v); return; }
-    if (el.matches("[data-cf]")) { S.cFilter = el.dataset.cf; render(); return; }
+    if (el.matches("[data-cf]")) { S.cFilter = el.dataset.cf; S.more.ctable = 50; render(); return; }
     if (el.matches("[data-kf]")) { S.kFilter = el.dataset.kf; render(); return; }
     if (el.matches("[data-sf]")) { S.sFilter = el.dataset.sf; render(); return; }
     if (el.matches("[data-reset]")) { const r = await team("reset", { email: el.dataset.reset }); if (r) showPassword(r.email, r.password, "New password ready"); return; }
@@ -1025,6 +1060,8 @@
     if (e.type === "submit" || (e.type === "change" && t.matches("select")) || (e.type === "click" && t.closest("button"))) S.drawerSelf = Date.now(); };
   ["submit", "change", "click"].forEach((ev) => document.addEventListener(ev, markSelf, true));
   document.addEventListener("change", (e) => {
+    const cm = { cOwner: "owner", cStage: "stage", cSort: "sort" }[e.target.id];
+    if (cm) { S.cv[cm] = e.target.value; S.more.ctable = 50; S.more.contacts = 0; saveCv(); renderContacts(); return; }
     const m = { bfOwner: "owner", bfFrom: "from", bfTo: "to", bfDay: "day", bfMonth: "month" }[e.target.id]; if (!m) return;
     S.bf[m] = e.target.value; S.more.box = TILE_STEP; try { localStorage.setItem("pulse-bf", JSON.stringify(S.bf)); } catch {} render();
   });
