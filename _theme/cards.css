@@ -1,0 +1,84 @@
+/* Pulse cards: slightly more compact product cards (loads after pulse-premium.css) */
+@media (min-width: 990px) {
+  html body .pulse-products__grid {
+    grid-template-columns: repeat(var(--pp-cols, 4), minmax(0, 350px));
+    justify-content: center;
+    gap: 1.5rem;
+    max-width: none;
+  }
+}
+html body .pulse-card { padding: 12px 12px 16px; border-radius: 20px; }
+html body .pulse-card__image { margin-bottom: 1rem; border-radius: 14px; }
+html body .pulse-card__image img { padding: 9%; }
+/* Accessory photos (white background) fill their frame edge to edge. */
+html body .pulse-card__image--fill { background: #fff; }
+html body .pulse-card__image--fill img { padding: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; }
+html body .pulse-card__footer-row { margin-bottom: .9rem; gap: .5rem; }
+html body .pulse-card__icon-group { gap: .35rem; }
+html body .pulse-card__icon-btn { width: 2.3rem; height: 2.3rem; }
+html body .pulse-card__icon-btn svg.pulse-ico { display: block; transition: transform .3s var(--pp-ease); }
+html body .pulse-card__icon-btn:hover svg.pulse-ico { transform: scale(1.08); }
+html body .pulse-card__icon-btn svg { width: 19px; height: 19px; }
+html body .pulse-card__icon-btn--wa { color: #002A74; }
+html body .pulse-card__icon-btn svg.pulse-ico--wa, html body .pulse-card__icon-btn svg.pulse-ico--bag { width: 20px; height: 20px; }
+html body .pulse-card__icon-btn--wa:hover { background: #002A74; border-color: #002A74 !important; color: #fff; }
+html body .pulse-card__buy-btn { padding: .75rem 1rem !important; font-size: .88rem !important; }
+
+/* ---- Premium info block: eyebrow, title, description ---- */
+html body .pulse-card__eyebrow {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: 0 4px; margin-bottom: .35rem;
+  font-size: .6rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--pulse-orange);
+}
+html body .pulse-card__eyebrow::before { content: ""; width: 16px; height: 1.5px; background: currentColor; border-radius: 2px; }
+html body .pulse-card__title { font-size: 1.1rem; font-weight: 700; letter-spacing: -.015em; line-height: 1.2; margin: 0 0 .35rem; }
+html body .pulse-card__desc {
+  font-size: .78rem; line-height: 1.55; color: var(--pp-muted); margin-bottom: 1rem;
+  -webkit-line-clamp: 2; min-height: calc(1.55em * 2);
+}
+
+/* ---- Feature strip: one soft panel, hairline dividers, distinct icons ---- */
+html body .pulse-card__tags {
+  list-style: none; margin: 0 4px 1rem; padding: .85rem .2rem .75rem;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0;
+  background: linear-gradient(180deg, #F8FAFD 0%, #F1F5FA 100%);
+  border: 1px solid var(--pp-line); border-radius: 14px;
+}
+html body .pulse-card__tag { position: relative; padding: 0 .3rem; display: flex; flex-direction: column; align-items: center; text-align: center; }
+html body .pulse-card__tag + .pulse-card__tag::before {
+  content: ""; position: absolute; left: 0; top: 10%; height: 80%; width: 1px;
+  background: linear-gradient(180deg, transparent, #DCE3EC 25%, #DCE3EC 75%, transparent);
+}
+html body .pulse-card__tag-icon {
+  width: 2.15rem; height: 2.15rem; margin: 0 auto .45rem; border-radius: 11px;
+  background: #fff; color: var(--pulse-navy);
+  box-shadow: 0 0 0 1px #E4E9F0, 0 4px 10px -6px rgba(15, 30, 54, .35);
+  transition: transform .35s var(--pp-ease), background .35s, color .35s;
+}
+html body .pulse-card__tag-icon svg { width: 17px; height: 17px; }
+html body .pulse-card__tag-icon .acc { stroke: var(--pulse-orange); }
+html body .pulse-card:hover .pulse-card__tag-icon { transform: translateY(-2px); }
+html body .pulse-card__tag-label {
+  font-size: .64rem; font-weight: 600; line-height: 1.25; letter-spacing: .005em;
+  color: #2B3A52; min-height: 2.5em; text-wrap: balance; word-break: normal; overflow-wrap: anywhere;
+}
+
+/* ---- Price ---- */
+html body .pulse-card__price-wrap { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+html body .pulse-card__price {
+  display: inline-flex; align-items: baseline; gap: .1rem; flex-wrap: wrap;
+  font-size: 1.4rem; font-weight: 800; letter-spacing: -.02em; line-height: 1;
+  color: var(--pp-ink); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+html body .pulse-card__cur { font-size: .62em; font-weight: 700; margin-right: .08em; transform: translateY(-.32em); color: var(--pulse-navy); }
+html body .pulse-card__mrp { margin-left: .4rem; font-size: .55em; font-weight: 500; color: #8A94A6; letter-spacing: 0; }
+html body .pulse-card__perk {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .64rem; font-weight: 600; color: #0B7A57; letter-spacing: .01em;
+}
+html body .pulse-card__perk svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+@media (max-width: 479px) {
+  html body .pulse-card__tag-label { font-size: .66rem; }
+}
