@@ -1,0 +1,42 @@
+{%- comment -%}
+  Pulse: friendly "no posts yet" message on the blog page. Shows only while the blog has no articles.
+{%- endcomment -%}
+{%- if blog and blog.articles_count == 0 -%}
+<style>
+  .pbe{max-width:760px;margin:0 auto 72px;padding:0 20px;font-family:var(--pulse-font-sans,inherit);}
+  .pbe__card{position:relative;overflow:hidden;text-align:center;padding:56px 28px 48px;border-radius:24px;background:linear-gradient(160deg,#F7FAFF 0%,#FFF6EC 100%);border:1px solid #E4E9F0;box-shadow:0 30px 60px -40px rgba(15,30,54,.45);}
+  .pbe__card:before{content:'';position:absolute;width:260px;height:260px;right:-90px;top:-110px;border-radius:50%;border:1px solid rgba(242,146,31,.35);}
+  .pbe__card:after{content:'';position:absolute;width:180px;height:180px;left:-70px;bottom:-90px;border-radius:50%;background:radial-gradient(circle,rgba(27,53,94,.08),transparent 70%);}
+  .pbe__ic{width:64px;height:64px;margin:0 auto 18px;border-radius:18px;display:grid;place-items:center;background:#1B355E;color:#fff;box-shadow:0 0 0 6px rgba(27,53,94,.08);}
+  .pbe__ic svg{width:30px;height:30px;}
+  .pbe__k{display:inline-block;margin:0 0 8px;font-size:11.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#F2921F;}
+  .pbe h2{margin:0 0 10px;font-size:clamp(22px,3vw,30px);font-weight:700;letter-spacing:-.02em;color:#0F1E36;}
+  .pbe p{margin:0 auto 26px;max-width:480px;font-size:15.5px;line-height:1.6;color:#5B6B82;}
+  .pbe__btns{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;}
+  .pbe a.pbe__btn{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 22px;border-radius:999px;font-size:14.5px;font-weight:700;text-decoration:none;}
+  .pbe a.pbe__btn--p{background:linear-gradient(180deg,#F7A640,#F2921F);color:#0F1E36;box-shadow:0 10px 22px -12px rgba(242,146,31,.9);}
+  .pbe a.pbe__btn--g{background:#fff;color:#1B355E;border:1px solid #C9D3E1;}
+</style>
+<section class='pbe' aria-label='Blog'>
+  <div class='pbe__card'>
+    <div class='pbe__ic' aria-hidden='true'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z'/><path d='M8 9h8M8 13h8M8 17h5'/></svg></div>
+    <span class='pbe__k'>Coming soon</span>
+    <h2>There are no blog posts yet</h2>
+    <p>We're working on helpful guides about electric wheelchairs, travel, care and everyday mobility. Check back soon.</p>
+    <div class='pbe__btns'>
+      <a class='pbe__btn pbe__btn--p' href='/collections/wheelchair'>Explore wheelchairs</a>
+      <a class='pbe__btn pbe__btn--g' href='/pages/contact'>Talk to an expert</a>
+    </div>
+  </div>
+</section>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Pulse blog: no posts yet",
+  "settings": [
+    { "type": "paragraph", "content": "Shows a \"no blog posts yet\" message on the blog page. It hides itself once the blog has at least one post." }
+  ],
+  "presets": [{ "name": "Pulse blog: no posts yet" }]
+}
+{% endschema %}
