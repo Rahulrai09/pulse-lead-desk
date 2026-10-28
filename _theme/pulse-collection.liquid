@@ -1,0 +1,377 @@
+{{ 'pulse-custom.css' | asset_url | stylesheet_tag }}
+{{ 'pulse-premium.css' | asset_url | stylesheet_tag }}
+{{ 'pulse-cards.css' | asset_url | stylesheet_tag }}
+<script type="module" src="{{ 'pulse-cart.js' | asset_url }}"></script>
+
+{%- liquid
+  assign pc_phone = section.settings.phone_number | default: '919071101108'
+  assign pc_wa = section.settings.whatsapp_number | default: pc_phone
+  assign pc_sort = collection.sort_by | default: collection.default_sort_by
+  assign pc_cols = collection.products_count | at_most: 4 | at_least: 2
+  # Accessories and spare-parts categories talk about items, not wheelchairs.
+  assign pc_kind = 'wheelchair'
+  assign pc_one = 'wheelchair'
+  assign pc_many = 'wheelchairs'
+  if collection.handle contains 'accessor'
+    assign pc_kind = 'accessory'
+    assign pc_one = 'accessory'
+    assign pc_many = 'accessories'
+  elsif collection.handle contains 'spare' or collection.handle contains 'part'
+    assign pc_kind = 'part'
+    assign pc_one = 'spare part'
+    assign pc_many = 'spare parts'
+  endif
+
+  # Background bands, same warm / cool look as the home page segments.
+  assign pc_tone_a = 'warm'
+  assign pc_tone_b = 'cool'
+  if collection.handle == 'lightweight-segment' or collection.handle == 'heavy-duty-segment' or pc_kind == 'part'
+    assign pc_tone_a = 'cool'
+    assign pc_tone_b = 'warm'
+  endif
+
+  # Banner image (Collection > Metafields: "Banner image (desktop) 1920x500").
+  assign pc_bn = collection.metafields.pulse.banner.value
+  # No banner set? Use the collection's own image when it is banner-shaped (e.g. 1920x500).
+  if pc_bn == blank and collection.image != blank and collection.image.aspect_ratio >= 3
+    assign pc_bn = collection.image
+  endif
+  assign pc_bn_m = collection.metafields.pulse.banner_mobile.value
+  assign pc_mlight = false
+  if pc_bn_m != blank and collection.metafields.pulse.banner_mobile_light.value == true
+    assign pc_mlight = true
+  endif
+  assign pc_hide_text = false
+  if pc_bn != blank and collection.metafields.pulse.banner_hide_text.value == true
+    assign pc_hide_text = true
+  endif
+-%}
+
+{% style %}
+  .pc{background:#fff;padding-bottom:4.5rem;font-family:var(--pulse-font-sans,system-ui,sans-serif);color:#0F1E36;-webkit-font-smoothing:antialiased;overflow-x:clip;}
+  .pc *{box-sizing:border-box;}
+  .pc-wrap{max-width:1280px;margin:0 auto;padding:0 1.5rem;}
+
+  /* Banner: 1920 x 500 shape on computers (grows only if the text needs more room) */
+  .pc-hero{position:relative;isolation:isolate;overflow:hidden;display:flex;align-items:center;background:radial-gradient(120% 140% at 100% 0%,#2E5591 0%,#1B355E 45%,#0F1E36 100%);color:#fff;padding:2.25rem 0 2.75rem;}
+  .pc-hero > .pc-wrap{width:100%;position:relative;z-index:2;}
+  @media (min-width:750px){.pc-hero{min-height:calc(100vw * 500 / 1920);}}
+  .pc-hero__media{position:absolute;inset:0;z-index:0;}
+  .pc-hero__media img{width:100%;height:100%;object-fit:cover;object-position:center;display:block;}
+  .pc-hero--img:not(.pc-hero--bare)::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(15,30,54,.82) 0%,rgba(15,30,54,.55) 38%,rgba(15,30,54,0) 68%);}
+  @media (max-width:749px){
+    .pc-hero--img{min-height:125vw;align-items:flex-end;}
+    .pc-hero--img:not(.pc-hero--bare)::after{background:linear-gradient(0deg,rgba(15,30,54,.88) 0%,rgba(15,30,54,.55) 45%,rgba(15,30,54,0) 75%);}
+  }
+  /* Phones with a mobile banner (1080 x 1350): wheelchairs on top, text starts just below them. */
+  @media (max-width:749px){
+    .pc-hero--mimg{align-items:flex-start;padding-top:calc(100vw * 600 / 1080);background:#10284F;}
+    .pc-hero--mimg .pc-hero__media img{height:auto;aspect-ratio:1080/1350;object-fit:cover;object-position:center top;}
+    .pc-hero--mimg:not(.pc-hero--bare)::after{background:linear-gradient(180deg,rgba(15,30,54,0) 0,rgba(15,30,54,0) calc(100vw * 520 / 1080),rgba(15,30,54,.45) calc(100vw * 720 / 1080),rgba(15,30,54,.7) 100%);}
+  }
+  /* Phones: tighter header text and smaller category buttons. */
+  @media (max-width:749px){
+    .pc-crumb{margin-bottom:1rem;}
+    .pc .pc-title{margin:.45rem 0 .5rem;}
+    .pc-switch{gap:.4rem;margin-top:1.25rem;}
+    .pc-pill{padding:.42rem .8rem;font-size:.74rem;}
+    .pc-hero--mimg .pc-tag{min-height:0;}
+    .pc-hero--mimg .pc-title{min-height:0;}
+  }
+  /* Phones, light mobile banner: keep the banner's own light colour below the chairs, dark text. */
+  @media (max-width:749px){
+    .pc-hero--mlight{background:var(--pc-mbg,#B9CCC8);color:#0F1E36;}
+    .pc-hero--mlight:not(.pc-hero--bare)::after{display:none;}
+    .pc-hero--mlight .pc-crumb{color:rgba(15,30,54,.62);}
+    .pc-hero--mlight .pc-crumb a:hover{color:#0F1E36;}
+    .pc .pc-hero--mlight .pc-title{color:#0F1E36;}
+    .pc-hero--mlight .pc-eyebrow{color:#C46A06;}
+    .pc-hero--mlight .pc-tag{color:#33415A;}
+    .pc-hero--mlight .pc-pill{border-color:rgba(27,53,94,.28);color:#1B355E;backdrop-filter:none;}
+    .pc-hero--mlight .pc-pill:hover{background:rgba(255,255,255,.35);border-color:#1B355E;color:#1B355E;}
+    .pc-hero--mlight .pc-pill.is-active{background:#1B355E;border-color:#1B355E;color:#fff;}
+  }
+  .pc-hero--bare{padding:0;}
+  .pc-vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+
+  .pc-crumb{font-size:12.5px;color:rgba(255,255,255,.65);margin:0 0 1.6rem;}
+  .pc-crumb a{color:inherit;text-decoration:none;}.pc-crumb a:hover{color:#fff;}
+  .pc-crumb span{margin:0 8px;opacity:.6;}
+  .pc-eyebrow{display:inline-flex;align-items:center;gap:.6rem;font-size:.72rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#EE8B1B;}
+  .pc-eyebrow:before{content:'';width:28px;height:1.5px;background:currentColor;}
+  .pc .pc-title{font-size:clamp(2rem,4.5vw,3.25rem);font-weight:700;letter-spacing:-.02em;line-height:1.08;margin:.6rem 0 .7rem;color:#fff;}
+  .pc-tag{max-width:640px;color:rgba(255,255,255,.78);font-size:1.02rem;line-height:1.6;margin:0;min-height:calc(1.6em * 2);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;}
+  .pc-eyebrow--empty{visibility:hidden;}
+  @media (min-width:750px){.pc .pc-title{white-space:nowrap;}}
+  @media (max-width:749px){.pc-tag{min-height:calc(1.6em * 3);-webkit-line-clamp:3;}.pc .pc-title{font-size:1.75rem;min-height:calc(1.08em * 2);display:flex;align-items:flex-end;}}
+  .pc-switch{display:flex;gap:.55rem;flex-wrap:wrap;margin-top:1.75rem;}
+  .pc-pill{padding:.6rem 1.1rem;border-radius:999px;border:1px solid rgba(255,255,255,.28);color:#fff;font-size:.86rem;font-weight:600;text-decoration:none;transition:all .2s;backdrop-filter:blur(4px);}
+  .pc-pill:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.55);color:#fff;}
+  .pc-pill.is-active{background:#fff;color:#1B355E;border-color:#fff;}
+  /* Pills shown under the banner when the image carries its own text */
+  .pc-switch--below{margin-top:1.5rem;}
+  .pc-switch--below .pc-pill{border-color:#D5DDE8;color:#1B355E;background:#fff;}
+  .pc-switch--below .pc-pill:hover{border-color:#1B355E;background:#fff;color:#1B355E;}
+  .pc-switch--below .pc-pill.is-active{background:#1B355E;border-color:#1B355E;color:#fff;}
+
+  /* Page background bands (as on the home page) */
+  .pc-band{position:relative;isolation:isolate;}
+  .pc-deco{position:absolute;z-index:-1;top:0;bottom:-3rem;left:50%;width:100vw;transform:translateX(-50%);overflow:hidden;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 90%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 90%,transparent 100%);}
+  .pc-band--b .pc-deco{top:-1rem;bottom:-4.5rem;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 8%,#000 88%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 8%,#000 88%,transparent 100%);}
+  .pc-deco--warm{background:linear-gradient(180deg,#FFF5EC 0%,#FFF9F2 45%,#FFFCF8 80%,#FFFFFF 100%);}
+  .pc-deco--cool{background:linear-gradient(180deg,#F2F7FF 0%,#E9F1FF 55%,#F4F8FF 100%);}
+  .pc-deco span{position:absolute;display:block;border-radius:50%;}
+  .pc-glow{aspect-ratio:1;filter:blur(8px);}
+  .pc-ring{border:2px solid;}
+  .pc-dgrid{border-radius:0!important;width:150px;height:110px;background-image:radial-gradient(#1B355E 1.4px,transparent 1.6px);background-size:16px 16px;opacity:.16;}
+  .pc-deco--warm .pc-glow--a{width:min(58vw,820px);right:-14vw;top:-6rem;background:radial-gradient(circle,rgba(255,172,82,.30),rgba(255,172,82,0) 68%);}
+  .pc-deco--warm .pc-glow--b{width:min(44vw,620px);left:-16vw;bottom:-4rem;background:radial-gradient(circle,rgba(47,107,250,.12),rgba(47,107,250,0) 68%);}
+  .pc-deco--warm .pc-ring--1{width:220px;height:220px;right:4vw;top:6rem;border-color:rgba(238,139,27,.45);}
+  .pc-deco--warm .pc-ring--2{width:120px;height:120px;right:calc(4vw + 50px);top:calc(6rem + 50px);border:1.5px dashed rgba(27,53,94,.16);}
+  .pc-deco--warm .pc-dot--1{width:14px;height:14px;left:9vw;top:3.2rem;background:#EE8B1B;}
+  .pc-deco--warm .pc-dot--2{width:9px;height:9px;right:3vw;top:26rem;background:#1B355E;}
+  .pc-deco--warm .pc-dot--3{width:20px;height:20px;left:3vw;top:55%;background:#2F6BFA;opacity:.18;}
+  .pc-deco--warm .pc-dgrid{left:1.5vw;top:6rem;}
+  .pc-deco--cool .pc-glow--a{width:min(52vw,740px);left:-14vw;top:-4rem;background:radial-gradient(circle,rgba(47,107,250,.26),rgba(47,107,250,0) 68%);}
+  .pc-deco--cool .pc-glow--b{width:min(46vw,640px);right:-12vw;bottom:-6rem;background:radial-gradient(circle,rgba(47,107,250,.18),rgba(47,107,250,0) 68%);}
+  .pc-deco--cool .pc-ring--1{width:260px;height:260px;right:-60px;top:3rem;border-color:rgba(47,107,250,.22);}
+  .pc-deco--cool .pc-ring--2{display:none;}
+  .pc-deco--cool .pc-dot--1{width:12px;height:12px;right:18vw;top:2.5rem;background:#EE8B1B;}
+  .pc-deco--cool .pc-dot--2{width:9px;height:9px;left:6vw;bottom:22%;background:#1B355E;opacity:.5;}
+  .pc-deco--cool .pc-dot--3{display:none;}
+  .pc-deco--cool .pc-dgrid{left:2vw;top:5rem;}
+  @media (max-width:749px){
+    .pc-deco .pc-ring--2,.pc-deco .pc-dgrid{display:none;}
+    .pc-deco--warm .pc-ring--1{width:140px;height:140px;right:-40px;top:3rem;}
+    .pc-deco--cool .pc-ring--1{width:160px;height:160px;right:-70px;}
+    .pc-deco .pc-glow--a{width:90vw;}
+    .pc-deco .pc-glow--b{width:80vw;}
+  }
+
+  .pc-bar{position:relative;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:1rem;padding:1.75rem 0 1.5rem;}
+  .pc-count{margin:0;color:#5B6B82;font-size:.94rem;}
+  .pc-count b{color:#0F1E36;}
+  .pc-sort{display:flex;align-items:center;gap:.6rem;font-size:.88rem;color:#5B6B82;margin:0;}
+  .pc .pc-sort select{height:42px;min-height:0;border:1px solid #E4E9F0;border-radius:999px;padding:0 1rem;background:#fff;color:#0F1E36;font:600 .88rem var(--pulse-font-sans,system-ui,sans-serif);cursor:pointer;box-shadow:0 8px 20px -14px rgba(27,53,94,.35);}
+  .pc .pc-sort select:focus{outline:none;border-color:#1B355E;}
+  .pc-grid{display:grid;grid-template-columns:1fr;gap:1.25rem;}
+  @media (min-width:600px){.pc-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+  /* Cards float on the band, like the home page */
+  html body .pc .pulse-card{border-color:transparent;box-shadow:0 30px 60px -32px rgba(27,53,94,.35),0 2px 6px rgba(15,30,54,.04);}
+  html body .pc .pulse-card:hover{border-color:transparent;box-shadow:0 36px 70px -30px rgba(27,53,94,.42),0 2px 6px rgba(15,30,54,.05);}
+  .pc-empty{padding:3rem 1.5rem;text-align:center;background:#fff;border:1px solid #E4E9F0;border-radius:22px;box-shadow:0 30px 60px -36px rgba(27,53,94,.3);}
+  .pc-empty p{color:#5B6B82;margin:0 0 1.2rem;}
+  .pc-pages{display:flex;justify-content:center;gap:.4rem;margin-top:2.5rem;font-weight:600;}
+  .pc-pages a,.pc-pages span{display:grid;place-items:center;min-width:40px;height:40px;padding:0 .8rem;border-radius:999px;border:1px solid #E4E9F0;background:#fff;color:#1B355E;text-decoration:none;}
+  .pc-pages .current{background:#1B355E;color:#fff;border-color:#1B355E;}
+  .pc-band--b{padding-top:3.5rem;}
+  .pc-help{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:1.25rem;padding:2rem 2.25rem;border-radius:24px;background:#fff;border:1px solid rgba(228,233,240,.8);box-shadow:0 30px 60px -36px rgba(27,53,94,.35);}
+  .pc-help h2{margin:0;font-size:1.4rem;font-weight:700;letter-spacing:-.01em;color:#0F1E36;}
+  .pc-help p{margin:.35rem 0 0;color:#5B6B82;font-size:.95rem;}
+  .pc-help-btns{display:flex;flex-wrap:wrap;gap:.75rem;}
+  .pc-btn{display:inline-flex;align-items:center;gap:.55rem;height:48px;padding:0 1.4rem;border-radius:999px;font-weight:700;font-size:.92rem;text-decoration:none;transition:all .2s;}
+  .pc-btn svg{width:18px;height:18px;}
+  .pc-btn--solid{background:linear-gradient(180deg,#24467A,#1B355E);color:#fff;box-shadow:0 10px 20px -12px rgba(27,53,94,.8);}
+  .pc-btn--solid:hover{background:#EE8B1B;color:#fff;}
+  .pc-btn--line{border:1.5px solid #1B355E;color:#1B355E;background:#fff;}
+  .pc-btn--line:hover{background:#1B355E;color:#fff;}
+  .pc-btn--line svg{color:#002A74;}.pc-btn--line:hover svg{color:#fff;}
+  .pulse-footer__help{display:none !important;}
+  .pc-faq{margin-top:3rem;}
+  .pc-faq h2{margin:0 0 1.2rem;font-size:clamp(1.4rem,2.6vw,1.9rem);font-weight:700;letter-spacing:-.02em;color:#0F1E36;}
+  .pc-faq__list{border:1px solid rgba(228,233,240,.8);border-radius:20px;background:#fff;overflow:hidden;box-shadow:0 30px 60px -36px rgba(27,53,94,.3);}
+  .pc-faq__item + .pc-faq__item{border-top:1px solid #E4E9F0;}
+  .pc-faq__item summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:1rem;cursor:pointer;padding:1.15rem 1.5rem;font-size:1rem;font-weight:700;color:#0F1E36;transition:background .2s;}
+  .pc-faq__item summary::-webkit-details-marker{display:none;}
+  .pc-faq__item summary:hover{background:#F5F7FA;}
+  .pc-faq__item summary::after{content:'';flex-shrink:0;width:9px;height:9px;border-right:2px solid #1B355E;border-bottom:2px solid #1B355E;transform:translateY(-3px) rotate(45deg);transition:transform .25s;}
+  .pc-faq__item[open] summary::after{transform:translateY(2px) rotate(-135deg);}
+  .pc-faq__a{padding:0 1.5rem 1.25rem;color:#3F4A5E;font-size:.95rem;line-height:1.7;}
+  @media (max-width:600px){.pc-faq__item summary{padding:1rem 1.1rem;font-size:.95rem;}.pc-faq__a{padding:0 1.1rem 1.1rem;}}
+{% endstyle %}
+
+{%- capture pc_switch_links -%}
+  {%- for pc_link in linklists['main-menu'].links -%}
+    {%- if pc_link.links.size > 0 -%}
+      {%- for pc_child in pc_link.links -%}
+        <a class="pc-pill{% if pc_child.url == collection.url %} is-active{% endif %}" href="{{ pc_child.url }}"{% if pc_child.url == collection.url %} aria-current="page"{% endif %}>{{ pc_child.title }}</a>
+      {%- endfor -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endcapture -%}
+
+<div class="pc">
+  <section class="pc-hero{% if pc_bn != blank %} pc-hero--img{% if pc_bn_m != blank %} pc-hero--mimg{% if pc_mlight %} pc-hero--mlight{% endif %}{% endif %}{% endif %}{% if pc_hide_text %} pc-hero--bare{% endif %}"{% if pc_mlight and collection.metafields.pulse.banner_mobile_bg != blank %} style="--pc-mbg:{{ collection.metafields.pulse.banner_mobile_bg.value }}"{% endif %}>
+    {%- if pc_bn != blank -%}
+      <div class="pc-hero__media">
+        <picture>
+          {%- if pc_bn_m != blank -%}
+            <source media="(max-width: 749px)" srcset="{{ pc_bn_m | image_url: width: 600 }} 600w, {{ pc_bn_m | image_url: width: 800 }} 800w, {{ pc_bn_m | image_url: width: 1000 }} 1000w" sizes="100vw">
+          {%- endif -%}
+          <img src="{{ pc_bn | image_url: width: 1920 }}" srcset="{{ pc_bn | image_url: width: 960 }} 960w, {{ pc_bn | image_url: width: 1440 }} 1440w, {{ pc_bn | image_url: width: 1920 }} 1920w, {{ pc_bn | image_url: width: 2400 }} 2400w" sizes="100vw" alt="{{ pc_bn.alt | default: collection.title | escape }}" width="1920" height="500" fetchpriority="high">
+        </picture>
+      </div>
+    {%- endif -%}
+    {%- if pc_hide_text -%}
+      <h1 class="pc-vh">{{ collection.title }}</h1>
+    {%- else -%}
+      <div class="pc-wrap">
+        <nav class="pc-crumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span>{{ collection.title }}</nav>
+        {%- if collection.products_count == 0 -%}
+          <span class="pc-eyebrow pc-eyebrow--empty" aria-hidden="true">&nbsp;</span>
+        {%- else -%}
+          <span class="pc-eyebrow">{{ collection.products_count }} {% if pc_kind == 'wheelchair' %}{% if collection.products_count == 1 %}model{% else %}models{% endif %}{% else %}{% if collection.products_count == 1 %}item{% else %}items{% endif %}{% endif %}</span>
+        {%- endif -%}
+        <h1 class="pc-title">{{ collection.title }}</h1>
+        <p class="pc-tag">{{ collection.description | strip_html }}</p>
+        {%- if section.settings.show_switcher -%}
+          <div class="pc-switch">{{ pc_switch_links }}</div>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+  </section>
+
+  <div class="pc-band pc-band--a">
+    <div class="pc-deco pc-deco--{{ pc_tone_a }}" aria-hidden="true"><span class="pc-glow pc-glow--a"></span><span class="pc-glow pc-glow--b"></span><span class="pc-ring pc-ring--1"></span><span class="pc-ring pc-ring--2"></span><span class="pc-dot pc-dot--1"></span><span class="pc-dot pc-dot--2"></span><span class="pc-dot pc-dot--3"></span><span class="pc-dgrid"></span></div>
+    <div class="pc-wrap">
+      {%- if pc_hide_text and section.settings.show_switcher -%}
+        <div class="pc-switch pc-switch--below">{{ pc_switch_links }}</div>
+      {%- endif -%}
+      {% paginate collection.products by section.settings.per_page %}
+        <div class="pc-bar">
+          <p class="pc-count"><b>{{ collection.products_count }}</b> {% if collection.products_count == 1 %}{{ pc_one }}{% else %}{{ pc_many }}{% endif %}</p>
+          {%- if collection.products_count > 1 -%}
+            <label class="pc-sort">Sort by
+              <select onchange="var u=new URL(window.location.href);u.searchParams.set('sort_by',this.value);u.searchParams.delete('page');window.location.href=u.toString();">
+                {%- for option in collection.sort_options -%}
+                  <option value="{{ option.value }}"{% if option.value == pc_sort %} selected{% endif %}>{{ option.name }}</option>
+                {%- endfor -%}
+              </select>
+            </label>
+          {%- endif -%}
+        </div>
+
+        {%- if collection.products.size > 0 -%}
+          <div class="pulse-products__grid pc-grid" style="--pp-cols:{{ pc_cols }}">
+            {%- for product in collection.products -%}
+              {% render 'pulse-product-card', product: product, phone: pc_phone, whatsapp: pc_wa %}
+            {%- endfor -%}
+          </div>
+        {%- else -%}
+          <div class="pc-empty">
+            {%- case pc_kind -%}
+              {%- when 'accessory' -%}
+                <p>New accessories are coming soon. Call or WhatsApp us and we'll help you find the right add-on for your Pulse wheelchair.</p>
+                <a class="pc-btn pc-btn--solid" href="https://wa.me/{{ pc_wa }}?text={{ 'Hi, I am looking for an accessory for my Pulse wheelchair.' | url_encode }}" target="_blank" rel="noopener">Ask about accessories</a>
+              {%- when 'part' -%}
+                <p>Spare parts will be listed here soon. Need a battery, charger, wheel or joystick today? Send us your wheelchair model and we'll help.</p>
+                <a class="pc-btn pc-btn--solid" href="https://wa.me/{{ pc_wa }}?text={{ 'Hi, I need a spare part for my Pulse wheelchair. My model is: ' | url_encode }}" target="_blank" rel="noopener">Ask about spare parts</a>
+              {%- else -%}
+                <p>No wheelchairs in this category yet.</p>
+                <a class="pc-btn pc-btn--solid" href="{{ routes.all_products_collection_url }}">Browse all wheelchairs</a>
+            {%- endcase -%}
+          </div>
+        {%- endif -%}
+
+        {%- if paginate.pages > 1 -%}
+          <nav class="pc-pages" aria-label="Pagination">
+            {%- for part in paginate.parts -%}
+              {%- if part.is_link -%}
+                <a href="{{ part.url }}">{{ part.title }}</a>
+              {%- elsif part.title == paginate.current_page -%}
+                <span class="current" aria-current="page">{{ part.title }}</span>
+              {%- else -%}
+                <span>{{ part.title }}</span>
+              {%- endif -%}
+            {%- endfor -%}
+          </nav>
+        {%- endif -%}
+      {% endpaginate %}
+    </div>
+  </div>
+
+  <div class="pc-band pc-band--b">
+    <div class="pc-deco pc-deco--{{ pc_tone_b }}" aria-hidden="true"><span class="pc-glow pc-glow--a"></span><span class="pc-glow pc-glow--b"></span><span class="pc-ring pc-ring--1"></span><span class="pc-ring pc-ring--2"></span><span class="pc-dot pc-dot--1"></span><span class="pc-dot pc-dot--2"></span><span class="pc-dot pc-dot--3"></span><span class="pc-dgrid"></span></div>
+    <div class="pc-wrap">
+    {%- if section.settings.show_help -%}
+      <div class="pc-help">
+        <div>
+          {%- if pc_kind == 'wheelchair' -%}
+            <h2>{{ section.settings.help_heading }}</h2>
+            <p>{{ section.settings.help_text }}</p>
+          {%- else -%}
+            <h2>Not sure what fits your wheelchair?</h2>
+            <p>Tell us your Pulse model and we'll confirm the right {{ pc_one }} for it.</p>
+          {%- endif -%}
+        </div>
+        <div class="pc-help-btns">
+          <a class="pc-btn pc-btn--solid" href="tel:+{{ pc_phone }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.9.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>Call {{ section.settings.phone_label }}</a>
+          <a class="pc-btn pc-btn--line" href="https://wa.me/{{ pc_wa }}?text={% if pc_kind == 'wheelchair' %}{{ 'Hi, I need help choosing a wheelchair from ' | append: collection.title | url_encode }}{% else %}{{ 'Hi, I have a question about ' | append: collection.title | url_encode }}{% endif %}" target="_blank" rel="noopener">{% render 'pulse-wa-icon' %}WhatsApp us</a>
+        </div>
+      </div>
+    {%- endif -%}
+
+    {%- liquid
+      assign faq_count = 0
+      assign faq_json = ''
+    -%}
+    {%- capture faq_items -%}
+      {%- for block in section.blocks -%}
+        {%- if block.type == 'faq' and block.settings.question != blank -%}
+          {%- assign faq_col = block.settings.collection -%}
+          {%- comment -%} General wheelchair FAQs are not shown on accessories or spare-parts pages. {%- endcomment -%}
+          {%- assign faq_show = false -%}
+          {%- if faq_col == blank -%}{%- if pc_kind == 'wheelchair' -%}{%- assign faq_show = true -%}{%- endif -%}{%- elsif faq_col.id == collection.id -%}{%- assign faq_show = true -%}{%- endif -%}
+          {%- if faq_show -%}
+            {%- assign faq_count = faq_count | plus: 1 -%}
+            <details class="pc-faq__item" {{ block.shopify_attributes }}>
+              <summary>{{ block.settings.question }}</summary>
+              <div class="pc-faq__a">{{ block.settings.answer | newline_to_br }}</div>
+            </details>
+            {%- capture faq_one -%}{"@type":"Question","name":{{ block.settings.question | json }},"acceptedAnswer":{"@type":"Answer","text":{{ block.settings.answer | json }}}}{%- endcapture -%}
+            {%- if faq_json != blank -%}{%- assign faq_json = faq_json | append: ',' -%}{%- endif -%}
+            {%- assign faq_json = faq_json | append: faq_one -%}
+          {%- endif -%}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endcapture -%}
+    {%- if faq_count > 0 -%}
+      <section class="pc-faq" aria-labelledby="pc-faq-title">
+        <h2 id="pc-faq-title">{{ section.settings.faq_heading }}</h2>
+        <div class="pc-faq__list">{{ faq_items }}</div>
+      </section>
+      <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{{ faq_json }}]}</script>
+    {%- endif -%}
+    </div>
+  </div>
+</div>
+
+{% schema %}
+{
+  "name": "Pulse Collection Page",
+  "settings": [
+    { "type": "range", "id": "per_page", "label": "Wheelchairs per page", "min": 8, "max": 24, "step": 4, "default": 12 },
+    { "type": "checkbox", "id": "show_switcher", "label": "Show segment buttons in header", "default": true },
+    { "type": "checkbox", "id": "show_help", "label": "Show 'Need help choosing?' band", "default": true },
+    { "type": "text", "id": "help_heading", "label": "Help heading", "default": "Not sure which one is right for you?" },
+    { "type": "text", "id": "help_text", "label": "Help text", "default": "Talk to a Pulse mobility expert. Free advice, no pressure." },
+    { "type": "text", "id": "phone_number", "label": "Call number (with country code, no + or spaces)", "default": "919071101108" },
+    { "type": "text", "id": "phone_label", "label": "Call number as shown to customers", "default": "+91 90711 01108" },
+    { "type": "text", "id": "whatsapp_number", "label": "WhatsApp number (with country code, no + or spaces)", "default": "919071101108" },
+    { "type": "text", "id": "faq_heading", "label": "FAQ heading", "default": "Frequently asked questions" }
+  ],
+  "blocks": [
+    {
+      "type": "faq",
+      "name": "FAQ",
+      "settings": [
+        { "type": "collection", "id": "collection", "label": "Show on this category only", "info": "Leave empty to show on every category page." },
+        { "type": "text", "id": "question", "label": "Question" },
+        { "type": "textarea", "id": "answer", "label": "Answer" }
+      ]
+    }
+  ],
+  "max_blocks": 50,
+  "enabled_on": { "templates": ["collection"] }
+}
+{% endschema %}
