@@ -1,0 +1,44 @@
+{%- comment -%}
+  Pulse: cover art for a blog post. Shows the post's cover image if it has one, otherwise a
+  branded gradient with an icon chosen from the post's tags.
+  Params: article, size ('lg' | 'md'), eager (true for an above-the-fold image)
+{%- endcomment -%}
+{%- liquid
+  assign pba_tags = article.tags | join: ' ' | downcase
+  assign pba_kind = 'guide'
+  if pba_tags contains 'flight' or pba_tags contains 'travel'
+    assign pba_kind = 'travel'
+  elsif pba_tags contains 'battery'
+    assign pba_kind = 'battery'
+  elsif pba_tags contains 'comparison'
+    assign pba_kind = 'compare'
+  elsif pba_tags contains 'maintenance' or pba_tags contains 'care'
+    assign pba_kind = 'battery'
+  endif
+  assign pba_alt = article.image.alt | default: article.title
+  assign pba_loading = 'lazy'
+  if eager
+    assign pba_loading = 'eager'
+  endif
+-%}
+<div class="pba pba--{{ size | default: 'md' }} pba--{{ pba_kind }}">
+  {%- if article.image -%}
+    {{ article.image | image_url: width: 1600 | image_tag: widths: '480, 800, 1200, 1600', sizes: '(min-width: 990px) 50vw, 100vw', loading: pba_loading, alt: pba_alt, class: 'pba__img' }}
+  {%- else -%}
+    <span class="pba__ring pba__ring--1" aria-hidden="true"></span>
+    <span class="pba__ring pba__ring--2" aria-hidden="true"></span>
+    <span class="pba__grid" aria-hidden="true"></span>
+    <span class="pba__icon" aria-hidden="true">
+      {%- case pba_kind -%}
+        {%- when 'travel' -%}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
+        {%- when 'battery' -%}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="17" height="10" rx="2.5"/><path d="M22 11v2"/><path d="m11 9-2.5 3.5h4L10 16"/></svg>
+        {%- when 'compare' -%}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 21h14"/><path d="M3 7h18"/><path d="m6 7-3 7a3.5 3.5 0 0 0 6 0z"/><path d="m18 7-3 7a3.5 3.5 0 0 0 6 0z"/></svg>
+        {%- else -%}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>
+      {%- endcase -%}
+    </span>
+  {%- endif -%}
+</div>

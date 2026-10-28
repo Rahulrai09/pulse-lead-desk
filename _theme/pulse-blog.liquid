@@ -1,0 +1,142 @@
+{%- render 'pulse-blog-styles' -%}
+{%- liquid
+  assign pbl_phone = section.settings.phone_number | default: '919071101108'
+  assign pbl_tag = current_tags | first
+-%}
+<style>
+  .pbl-hero{padding:3.25rem 0 3.5rem;}
+  .pbl-hero h1{margin:.7rem 0 .8rem;font-size:clamp(2.1rem,4.6vw,3.4rem);font-weight:700;letter-spacing:-.025em;line-height:1.06;color:#fff;max-width:760px;}
+  .pbl-hero p{margin:0;max-width:620px;font-size:1.05rem;line-height:1.65;color:rgba(255,255,255,.78);}
+  .pbl-topics{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.8rem;}
+  .pbl-topics a{transition:all .2s;}
+  .pbl-topics a:hover{background:rgba(255,255,255,.2);}
+  .pbl-topics a.is-active{background:#fff;color:#1B355E;border-color:#fff;}
+  .pbl-body{position:relative;padding:3rem 0 4.5rem;background:linear-gradient(180deg,#F2F7FF 0%,#FFFFFF 60%);}
+  .pbl-feat{display:grid;grid-template-columns:1.15fr 1fr;gap:2.5rem;align-items:center;padding:14px;border-radius:28px;background:#fff;border:1px solid #E4E9F0;box-shadow:0 40px 80px -50px rgba(15,30,54,.45);text-decoration:none;margin-bottom:2.5rem;transition:transform .45s cubic-bezier(.2,.7,.2,1),box-shadow .45s;}
+  .pbl-feat:hover{transform:translateY(-4px);box-shadow:0 46px 90px -46px rgba(15,30,54,.5);}
+  .pbl-feat:hover .pba__img{transform:scale(1.03);}
+  .pbl-feat .pba{aspect-ratio:16/10;border-radius:20px;}
+  .pbl-feat__body{display:flex;flex-direction:column;gap:.9rem;padding:1rem 1.5rem 1rem 0;}
+  .pbl-feat__label{font-size:.7rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#C96F0C;}
+  .pbl-feat h2{margin:0;font-size:clamp(1.5rem,2.6vw,2.1rem);font-weight:700;line-height:1.18;letter-spacing:-.02em;color:#0F1E36;}
+  .pbl-feat p{margin:0;font-size:1rem;line-height:1.65;color:#5B6B82;}
+  .pbl-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.6rem;}
+  .pbl-head{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin:0 0 1.4rem;}
+  .pbl-head h2{margin:0;font-size:1.35rem;font-weight:700;letter-spacing:-.015em;color:#0F1E36;}
+  .pbl-head span{font-size:.88rem;color:#5B6B82;}
+  .pbl-pages{display:flex;justify-content:center;gap:.4rem;margin-top:2.5rem;font-weight:600;}
+  .pbl-pages a,.pbl-pages span{display:grid;place-items:center;min-width:40px;height:40px;padding:0 .8rem;border-radius:999px;border:1px solid #E4E9F0;background:#fff;color:#1B355E;text-decoration:none;}
+  .pbl-pages .current{background:#1B355E;color:#fff;border-color:#1B355E;}
+  .pbl-empty{text-align:center;padding:3.5rem 1.5rem;border-radius:24px;background:#fff;border:1px solid #E4E9F0;}
+  .pbl-empty h2{margin:0 0 .5rem;font-size:1.5rem;color:#0F1E36;}
+  .pbl-empty p{margin:0 auto 1.4rem;max-width:460px;color:#5B6B82;line-height:1.6;}
+  .pbl-help{margin-top:3.5rem;}
+  @media (max-width:989px){.pbl-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.pbl-feat{grid-template-columns:1fr;gap:1rem;}.pbl-feat__body{padding:.4rem .8rem 1rem;}}
+  @media (max-width:640px){
+    .pbl-hero{padding:2.25rem 0 2.5rem;}
+    .pbl-hero p{font-size:.96rem;}
+    .pbl-topics{flex-wrap:nowrap;overflow-x:auto;margin-right:-1.1rem;padding-right:1.1rem;scrollbar-width:none;}
+    .pbl-topics::-webkit-scrollbar{display:none;}
+    .pbl-body{padding:2rem 0 3rem;}
+    .pbl-grid{grid-template-columns:1fr;gap:1.2rem;}
+    .pbl-feat{padding:10px;border-radius:22px;margin-bottom:1.75rem;}
+  }
+</style>
+
+<div class="pb">
+  <section class="pb-hero pbl-hero">
+    <div class="pb-wrap">
+      <nav class="pb-crumb" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span>{% if pbl_tag %}<a href="{{ blog.url }}">{{ section.settings.heading }}</a><span>/</span>{{ pbl_tag }}{% else %}{{ section.settings.heading }}{% endif %}</nav>
+      <span class="pb-eyebrow">{{ section.settings.eyebrow }}</span>
+      <h1>{% if pbl_tag %}{{ pbl_tag }}{% else %}{{ section.settings.heading }}{% endif %}</h1>
+      <p>{{ section.settings.intro }}</p>
+      {%- if blog.all_tags.size > 0 -%}
+        <div class="pbl-topics" aria-label="Topics">
+          <a class="pb-chip pb-chip--glass{% unless pbl_tag %} is-active{% endunless %}" href="{{ blog.url }}">All guides</a>
+          {%- for t in blog.all_tags -%}
+            {%- if t == 'Electric wheelchair' -%}{%- continue -%}{%- endif -%}
+            <a class="pb-chip pb-chip--glass{% if t == pbl_tag %} is-active{% endif %}" href="{{ blog.url }}/tagged/{{ t | handleize }}">{{ t }}</a>
+          {%- endfor -%}
+        </div>
+      {%- endif -%}
+    </div>
+  </section>
+
+  <section class="pbl-body">
+    <div class="pb-wrap">
+      {%- paginate blog.articles by 12 -%}
+        {%- if blog.articles.size == 0 -%}
+          <div class="pbl-empty">
+            <h2>New guides are on the way</h2>
+            <p>We're writing helpful guides about electric wheelchairs, travel, care and everyday mobility. Check back soon.</p>
+            <a class="pb-btn pb-btn--navy" href="/collections/wheelchair">Explore wheelchairs</a>
+          </div>
+        {%- else -%}
+          {%- assign pbl_feature = false -%}
+          {%- if paginate.current_page == 1 and blog.articles.size > 2 -%}{%- unless pbl_tag -%}{%- assign pbl_feature = true -%}{%- endunless -%}{%- endif -%}
+          {%- for article in blog.articles -%}
+            {%- if forloop.first and pbl_feature -%}
+              {%- liquid
+                assign f_words = article.content | strip_html | split: ' ' | size
+                assign f_mins = f_words | divided_by: 200 | plus: 1
+                assign f_text = article.excerpt | default: article.content | strip_html | truncatewords: 40
+              -%}
+              <a class="pbl-feat" href="{{ article.url }}">
+                {%- render 'pulse-blog-art', article: article, size: 'lg', eager: true -%}
+                <div class="pbl-feat__body">
+                  <span class="pbl-feat__label">Latest guide</span>
+                  <h2>{{ article.title }}</h2>
+                  <p>{{ f_text }}</p>
+                  <div class="pb-meta"><span>{{ article.published_at | date: '%d %b %Y' }}</span><span>· {{ f_mins }} min read</span></div>
+                  <span class="pb-card__more">Read guide<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+                </div>
+              </a>
+              <div class="pbl-head"><h2>More guides</h2><span>{{ blog.articles_count | minus: 1 }} more</span></div>
+              <div class="pbl-grid">
+            {%- else -%}
+              {%- if forloop.first -%}<div class="pbl-grid">{%- endif -%}
+              {%- assign pbl_eager = false -%}{%- if forloop.index <= 3 -%}{%- assign pbl_eager = true -%}{%- endif -%}
+              {%- render 'pulse-blog-card', article: article, eager: pbl_eager -%}
+            {%- endif -%}
+            {%- if forloop.last -%}</div>{%- endif -%}
+          {%- endfor -%}
+
+          {%- if paginate.pages > 1 -%}
+            <nav class="pbl-pages" aria-label="Pagination">
+              {%- for part in paginate.parts -%}
+                {%- if part.is_link -%}<a href="{{ part.url }}">{{ part.title }}</a>
+                {%- elsif part.title == paginate.current_page -%}<span class="current" aria-current="page">{{ part.title }}</span>
+                {%- else -%}<span>{{ part.title }}</span>{%- endif -%}
+              {%- endfor -%}
+            </nav>
+          {%- endif -%}
+        {%- endif -%}
+      {%- endpaginate -%}
+
+      <div class="pb-help pbl-help">
+        <div>
+          <h2>{{ section.settings.help_heading }}</h2>
+          <p>{{ section.settings.help_text }}</p>
+        </div>
+        <div class="pb-help__btns">
+          <a class="pb-btn pb-btn--org" href="https://wa.me/{{ pbl_phone }}?text={{ 'Hi, I need help choosing a Pulse wheelchair.' | url_encode }}" target="_blank" rel="noopener">{% render 'pulse-wa-icon' %}WhatsApp an expert</a>
+          <a class="pb-btn pb-btn--glass" href="/collections/wheelchair">Browse wheelchairs</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+{% schema %}
+{
+  "name": "Pulse blog list",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Small label", "default": "Pulse Journal" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Guides & advice" },
+    { "type": "textarea", "id": "intro", "label": "Intro", "default": "Practical, honest guides to choosing, travelling with and looking after an electric wheelchair in India, from the Pulse mobility team." },
+    { "type": "text", "id": "help_heading", "label": "Help band heading", "default": "Not sure which wheelchair is right?" },
+    { "type": "text", "id": "help_text", "label": "Help band text", "default": "Tell a Pulse mobility expert the user's weight, home and how they'll travel. Free advice, no pressure." },
+    { "type": "text", "id": "phone_number", "label": "WhatsApp number (with country code, no + or spaces)", "default": "919071101108" }
+  ]
+}
+{% endschema %}
