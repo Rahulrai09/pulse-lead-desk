@@ -108,7 +108,7 @@
     setSync("busy", "Loading…");
     try {
       const since = new Date(now() - 120 * DAY).toISOString();
-      const [customers, checkouts, orders, events, contacts, notes, followups, team, sync, leads, reports] = await Promise.all([
+      const [customers, checkouts, orders, events, contacts, notes, followups, team, sync, leads, reports, visitTotals] = await Promise.all([
         fetchAll("sh_customers", "id,name,email,phone,city,created_at,updated_at,orders_count,amount_spent,tags,state", "updated_at"),
         fetchAll("sh_checkouts", "id,customer_id,name,email,phone,city,created_at,updated_at,completed_at,total,items,recover_url", "created_at"),
         fetchAll("sh_orders", "id,name,customer_id,customer_name,email,phone,created_at,cancelled_at,financial,fulfillment,total,items", "created_at"),
@@ -123,6 +123,7 @@
         sb.from("crm_sync_log").select("*").order("started_at", { ascending: false }).limit(12).then((r) => r.data || []),
         fetchAll("crm_leads", "*", "created_at").then((r) => r.filter((x) => !x.hidden)),
         sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14).then((r) => r.data || []),
+        sb.rpc("crm_visit_totals").then((r) => r.data || null, () => null),
       ]);
       if (S.loaded) {
         const oldC = new Set(S.raw.customers.map((c) => c.id)), oldK = new Set(S.raw.checkouts.map((k) => k.id)), oldO = new Set(S.raw.orders.map((o) => o.id));
@@ -131,6 +132,7 @@
         orders.filter((o) => !oldO.has(o.id)).forEach((o) => notify("New order", `${o.customer_name || o.email || "A customer"} placed ${o.name || "an order"}`));
       }
       Object.assign(S.raw, { customers, checkouts, orders, events, contacts, notes, followups, team, sync, leads, reports });
+      S.vt = visitTotals || S.vt || null;
       S.contacts = build();
       S.loaded = true;
       syncStatus();
@@ -432,6 +434,12 @@
           items: show.map(({ p, x, done: d, why }) => ({ p, leadKey: x.key, lead: x, owner: x.owner_email || "", at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${esc(why)})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
       })(),
       { id: "browse", label: "Browsing now", sub: "on the store, last 30 min", empty: "Nobody is on the store right now.", items: browseItems() },
+      (() => {
+        const v = S.vt || {}, n = (x) => Number(x || 0).toLocaleString("en-IN");
+        return { id: "visits", label: "Total visits", value: n(v.all_visits), sub: `${n(v.today_visits)} today · ${n(v.d7_visits)} in 7 days · ${n(v.all_visitors)} visitors`,
+          panelTitle: "Visitors", panelSub: "people who visited in the last 14 days, latest first · count = visits per person",
+          empty: "No visits recorded yet.", items: visitItems() };
+      })(),
       { id: "carts", label: "Live add to cart", sub: S.period.p === "all" ? "last 48 h" : periodLabel(), empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
       { id: "hot", label: "Hot leads", sub: "unpaid checkouts, 14 days", cls: "k-bad", empty: "No unconverted checkouts in the last 14 days.", items: byAt(hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
     ];
@@ -469,9 +477,10 @@
     const cur = boxes.find((b) => b.id === S.box);
     renderBoxFilters();
     const items = boxFilter(cur.items);
-    $("bxTitle").textContent = cur.label;
+    $("bxTitle").textContent = cur.panelTitle || cur.label;
     $("bxToggle").innerHTML = cur.toggle ? `<div class="seg"><button type="button" data-ldone="0" aria-pressed="${!cur.toggle.done}">Pending ${cur.toggle.nPend}</button><button type="button" data-ldone="1" aria-pressed="${cur.toggle.done}">Done ${cur.toggle.nDone}</button></div>` : "";
-    $("bxSub").textContent = items.length === cur.items.length ? cur.sub : `${items.length} of ${cur.items.length} match your filters · ${cur.sub}`;
+    const psub = cur.panelSub || cur.sub;
+    $("bxSub").textContent = items.length === cur.items.length ? psub : `${items.length} of ${cur.items.length} match your filters · ${psub}`;
     $("bxList").innerHTML = tiles("box", items, items.length || !cur.items.length ? cur.empty : "Nobody matches these filters.");
     S.tileName = cur.id;
     const C = S.contacts;
@@ -546,6 +555,24 @@
       const p = r.c.startsWith("v:") ? null : byKey("c" + r.c);
       const what = r.last.kind === "view" ? "Looking at <b>" + esc(r.last.meta?.t || "a product") + "</b>" : r.last.kind === "search" ? `Searched “${esc(r.last.meta?.t || "")}”` : r.last.kind === "cart" ? "Added to cart · <b>" + esc(r.last.meta?.t || "") + "</b>" : r.last.kind === "checkout" ? "<b>On the payment page</b>" : r.last.kind === "login" ? "Just logged in" : "Viewing " + esc(pageName(r.last.path, r.last.meta));
       return { p, name: p ? "" : "Guest " + r.c.slice(-4).toUpperCase(), chip: p ? "" : '<span class="chip c-signup">Guest · not logged in</span>', at: r.last.created_at, line: `<span style="color:var(--good)">● </span>${what}`, kv: [["Pages", String(r.pages.size)], ["Device", r.last.device || ""]] };
+    });
+  }
+  /* Everyone who visited in the last 14 days, most recent first: visits, pages and where they came from. */
+  function visitItems() {
+    const byP = new Map();
+    for (const e of S.raw.events) {
+      if (e.kind !== "visit") continue; const c = evPerson(e);
+      const cur = byP.get(c) || { c, last: e, first: e, pages: new Set(), n: 0, devices: new Set() };
+      if (t(e.created_at) > t(cur.last.created_at)) cur.last = e;
+      if (t(e.created_at) < t(cur.first.created_at)) cur.first = e;
+      if (e.path) cur.pages.add(e.path); if (e.device) cur.devices.add(e.device); cur.n++; byP.set(c, cur);
+    }
+    return [...byP.values()].sort((a, b) => t(b.last.created_at) - t(a.last.created_at)).map((r) => {
+      const p = r.c.startsWith("v:") ? null : byKey("c" + r.c);
+      const src = (S.firstSrc[r.c.startsWith("v:") ? r.c : "c" + r.c] || {}).src || "Direct / unknown";
+      return { p, name: p ? "" : "Guest " + r.c.slice(-4).toUpperCase(), chip: p ? "" : '<span class="chip c-signup">Guest · not logged in</span>', at: r.last.created_at,
+        line: `<b>${r.n} visit${r.n === 1 ? "" : "s"}</b> · ${r.pages.size} page${r.pages.size === 1 ? "" : "s"} · last on ${esc(pageName(r.last.path, r.last.meta))}`,
+        kv: [["From", src], ["First visit", fmtDT(r.first.created_at)], ["Device", [...r.devices].join(", ")]] };
     });
   }
   function cartItems() {
@@ -1168,7 +1195,7 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_leads" }, (p) => { reload("leads"); if (p.eventType === "INSERT" && p.new?.origin === "form") notify("New website enquiry", `${p.new.name}${p.new.phone ? " · " + p.new.phone : ""} · ${p.new.kind}`); })
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_sync_log" }, (p) => { if (p.new?.finished_at && p.new?.ok) loadAll(); else reload("sync"); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "store_events" }, (p) => {
-        S.raw.events.unshift(p.new); S.contacts = build(); render();
+        S.raw.events.unshift(p.new); if (p.new?.kind === "visit" && S.vt) { S.vt.all_visits++; S.vt.today_visits++; S.vt.d7_visits++; S.vt.d30_visits++; } S.contacts = build(); render();
         if ((p.new?.kind === "cart" && !String(p.new.path || "").startsWith("/checkouts")) || p.new?.kind === "checkout") {
           const w = cartWho(p.new), m = p.new.meta || {};
           notify(p.new.kind === "cart" ? "Added to cart" : "Checkout started", `${w.name} (${w.tag}) ${p.new.kind === "cart" ? "added " + (m.t || "a product") + (m.a ? " · ₹" + Number(m.a * (m.q || 1)).toLocaleString("en-IN") : "") : "started checkout" + (m.tot ? " · ₹" + Number(m.tot).toLocaleString("en-IN") : "")}`);
