@@ -1,0 +1,67 @@
+{%- comment -%}
+  Pulse: for signed-out visitors only.
+  1. Opens the store's login / sign-up pop-up (OTP+ phone login on the account icon) 1 second after the page loads,
+     then again every 15 seconds while they stay signed out and the pop-up is closed.
+     Never on cart, checkout, account, password or policy pages, and never while someone is typing in a form
+     or another pop-up (demo form, Diwali card) is open.
+  2. Guests can't keep a cart or a discount: anything left in a signed-out browser (old cart, Diwali code) is cleared.
+     Signing in first is required to add to cart or buy (see assets/pulse-cart.js).
+{%- endcomment -%}
+{%- unless customer -%}
+<script>
+  (function () {
+    /* Clear a cart / discount left over in this browser while signed out. */
+    try { localStorage.removeItem('pulseDiwali3000'); } catch (e) {}
+    try { document.cookie = 'discount_code=; Max-Age=0; path=/'; } catch (e) {}
+    fetch('/cart.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (c) {
+        if (!c || !c.item_count) return;
+        return fetch('/cart/clear.js', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: '{}' })
+          .then(function () {
+            document.querySelectorAll('.cart-bubble__text-count, [data-cart-count], .cart-count-bubble span').forEach(function (el) { el.textContent = ''; });
+            document.querySelectorAll('.cart-bubble, .cart-count-bubble').forEach(function (el) { el.classList.add('visually-hidden'); });
+          });
+      }).catch(function () {});
+  })();
+</script>
+{%- assign pln_skip = false -%}
+{%- if template.name == 'cart' or template.name == 'password' or template.name == 'policy' or template contains 'customers' or request.path contains '/policies/' or request.path contains '/apps/' -%}{%- assign pln_skip = true -%}{%- endif -%}
+{%- unless pln_skip -%}
+<script>
+  (function () {
+    var FIRST = 1000, EVERY = 15000;
+    function visible(el) {
+      var r = el.getBoundingClientRect(); if (r.width < 200 || r.height < 150) return false;
+      var cs = getComputedStyle(el); return cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0.05;
+    }
+    /* Is the login pop-up (or any other pop-up) already on screen? */
+    function loginOpen() {
+      var els = document.querySelectorAll('[class*="otp"], [id*="otp"]');
+      for (var i = 0; i < els.length; i++) if (visible(els[i])) return true;
+      return false;
+    }
+    function busy() {
+      if (document.querySelector('.pdm.is-open, .pdw-ov.open, dialog[open], .prs__lb.open')) return true;
+      var f = document.activeElement;
+      return !!(f && /^(INPUT|TEXTAREA|SELECT)$/.test(f.tagName) && !f.closest('[class*="otp"], [id*="otp"]'));
+    }
+    function signedIn() { return !!document.querySelector('.pulse-account-avatar'); }
+    function show() {
+      if (signedIn() || loginOpen() || busy() || document.hidden) return;
+      var a = document.querySelector('[data-pulse-account]');
+      if (!a) return;
+      /* Let the login app handle the click; if it doesn't (not loaded yet), stop the page from navigating away. */
+      var guard = function (e) { if (!e.defaultPrevented) e.preventDefault(); document.removeEventListener('click', guard); };
+      document.addEventListener('click', guard);
+      a.click();
+      setTimeout(function () { document.removeEventListener('click', guard); }, 0);
+    }
+    setTimeout(function () {
+      show();
+      var t = setInterval(function () { if (signedIn()) { clearInterval(t); return; } show(); }, EVERY);
+    }, FIRST);
+  })();
+</script>
+{%- endunless -%}
+{%- endunless -%}
