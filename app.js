@@ -12,7 +12,7 @@
 
   const S = {
     me: null, role: null, view: "overview", cFilter: "all", kFilter: "all", sFilter: "upcoming", search: "", open: null,
-    raw: { customers: [], checkouts: [], orders: [], events: [], contacts: [], notes: [], followups: [], team: [], sync: [], leads: [], reports: [] }, rep: null, repMetric: "visit", repGroup: "day",
+    raw: { customers: [], checkouts: [], orders: [], events: [], contacts: [], notes: [], followups: [], remarks: [], team: [], sync: [], leads: [], reports: [] }, rep: null, repMetric: "visit", repGroup: "day",
     contacts: [], ck: [], v2c: {}, loaded: false, period: { p: "all", from: "", to: "" },
   };
   const $ = (id) => document.getElementById(id);
@@ -108,7 +108,7 @@
     setSync("busy", "Loading…");
     try {
       const since = new Date(now() - 120 * DAY).toISOString();
-      const [customers, checkouts, orders, events, contacts, notes, followups, team, sync, leads, reports, visitTotals] = await Promise.all([
+      const [customers, checkouts, orders, events, contacts, notes, followups, team, sync, leads, reports, visitTotals, remarks] = await Promise.all([
         fetchAll("sh_customers", "id,name,email,phone,city,created_at,updated_at,orders_count,amount_spent,tags,state", "updated_at"),
         fetchAll("sh_checkouts", "id,customer_id,name,email,phone,city,created_at,updated_at,completed_at,total,items,recover_url", "created_at"),
         fetchAll("sh_orders", "id,name,customer_id,customer_name,email,phone,created_at,cancelled_at,financial,fulfillment,total,items", "created_at"),
@@ -124,6 +124,7 @@
         fetchAll("crm_leads", "*", "created_at").then((r) => r.filter((x) => !x.hidden)),
         sb.from("crm_reports").select("*").order("created_at", { ascending: false }).limit(14).then((r) => r.data || []),
         sb.rpc("crm_visit_totals").then((r) => r.data || null, () => null),
+        fetchAll("crm_call_remarks", "*").catch(() => []),
       ]);
       if (S.loaded) {
         const oldC = new Set(S.raw.customers.map((c) => c.id)), oldK = new Set(S.raw.checkouts.map((k) => k.id)), oldO = new Set(S.raw.orders.map((o) => o.id));
@@ -131,7 +132,7 @@
         checkouts.filter((k) => !oldK.has(k.id)).forEach((k) => notify("New checkout", `${k.name || k.email || k.phone || "Someone"} started checkout${k.total ? " · ₹" + Number(k.total).toLocaleString("en-IN") : ""}`));
         orders.filter((o) => !oldO.has(o.id)).forEach((o) => notify("New order", `${o.customer_name || o.email || "A customer"} placed ${o.name || "an order"}`));
       }
-      Object.assign(S.raw, { customers, checkouts, orders, events, contacts, notes, followups, team, sync, leads, reports });
+      Object.assign(S.raw, { customers, checkouts, orders, events, contacts, notes, followups, team, sync, leads, reports, remarks });
       S.vt = visitTotals || S.vt || null;
       S.contacts = build();
       S.loaded = true;
@@ -147,6 +148,7 @@
       contacts: () => fetchAll("crm_contacts", "*"),
       notes: () => fetchAll("crm_notes", "*", "created_at"),
       followups: () => fetchAll("crm_followups", "*"),
+      remarks: () => fetchAll("crm_call_remarks", "*"),
       sync: () => sb.from("crm_sync_log").select("*").order("started_at", { ascending: false }).limit(12).then((r) => r.data || []),
       team: () => sb.from("crm_team").select("*").order("created_at").then((r) => r.data || []),
       leads: () => fetchAll("crm_leads", "*", "created_at").then((r) => r.filter((x) => !x.hidden)),
@@ -209,6 +211,8 @@
     const notes = {}, fus = {};
     for (const n of R.notes) (notes[n.key] ||= []).push(n);
     for (const f of R.followups) (fus[f.key] ||= []).push(f);
+    const rms = {};
+    for (const r of R.remarks || []) (rms[r.key] ||= []).push(r);
     const list = [...byKey.values()];
     for (const p of list) {
       p.checkouts.sort((a, b) => t(b.created_at) - t(a.created_at));
@@ -243,6 +247,8 @@
       p.notes = notes[p.key] || [];
       p.followups = (fus[p.key] || []).slice().sort((a, b) => t(a.due_at) - t(b.due_at));
       p.nextFU = p.followups.find((f) => !f.done) || null;
+      p.remarks = (rms[p.key] || []).slice().sort((a, b) => a.level - b.level);
+      p.lastRemark = p.remarks[p.remarks.length - 1] || null;
     }
     list.sort((a, b) => Math.max(t(b.lastActive), t(b.lastCheckout)) - Math.max(t(a.lastActive), t(a.lastCheckout)));
     return list;
@@ -252,6 +258,13 @@
 
   /* ---------- Render helpers ---------- */
   const chip = (p) => `<span class="chip c-${p.status}">${esc(p.statusText)}</span>`;
+  /* ---------- Call remarks (1st to 4th call) ---------- */
+  const ORD = ["", "1st", "2nd", "3rd", "4th"];
+  const OUTCOMES = [["Interested", 70], ["Wants a demo / visit", 75], ["Thinking / needs time", 50], ["Price concern", 40], ["Call back later", 40], ["Not reachable", 20], ["Not interested", 5], ["Bought / converted", 100]];
+  const CHANCES = [[90, "Very likely"], [70, "Likely"], [50, "Maybe"], [25, "Unlikely"], [5, "Very unlikely"]];
+  const chanceLbl = (c) => (CHANCES.find(([v]) => c >= v) || CHANCES[CHANCES.length - 1])[1];
+  const chanceCls = (c) => (c >= 70 ? "hi" : c >= 40 ? "mid" : "lo");
+  const rmChip = (p) => (p && p.lastRemark ? `<span class="chip rm-pill rm-${chanceCls(p.lastRemark.chance)}">${ORD[p.lastRemark.level]} call · ${p.lastRemark.chance}%</span>` : "");
   // link: show the checkout link only on rows about a checkout (not on cart-only, login or enquiry rows).
   function actions(p, link = true) {
     const a = [];
@@ -374,7 +387,7 @@
       const kv = (p ? [["Phone", p.phone], ["City", p.city], ["From", p.came]] : []).concat(it.kv || []).filter((r) => r[1]);
       return `<article class="tile"${p ? ` data-open="${p.key}"` : ""}>
         <div class="t-top"><span class="av">${esc(initials(name))}</span><div class="t-who"><b class="t-name">${esc(name)}</b>${starHtml(st)}</div></div>
-        <div class="t-chips">${it.chip || (p ? chip(p) : "")}</div>
+        <div class="t-chips">${it.chip || (p ? chip(p) : "")}${rmChip(p)}</div>
         <p class="t-line">${it.line}</p>
         ${kv.length ? `<dl class="t-kv">${kv.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
         ${it.note ? `<p class="t-note">${esc(it.note)}</p>` : ""}
@@ -771,7 +784,7 @@
           <div class="dh-who"><h2>${esc(p.name)}</h2>${starHtml(starsFor(p.lastActive || p.createdAt))}</div>
           <div class="acts"><button class="btn small" type="button" id="dRefresh" data-drefresh title="Load the latest activity for this contact">Refresh</button><button class="btn small" type="button" data-close>Close</button></div>
         </div>
-        <div class="dh-chips">${chip(p)}${p.fresh ? '<span class="chip c-checkout">Fresh sign-up</span>' : ""}${p.lastLogin && now() - t(p.lastLogin) < DAY ? '<span class="chip c-checkout">Logged in today</span>' : ""}<span class="t-owner${own ? " on" : ""} dh-own"><span>Owner</span><b>${own ? esc(own) : "Null"}</b></span></div>
+        <div class="dh-chips">${chip(p)}${p.fresh ? '<span class="chip c-checkout">Fresh sign-up</span>' : ""}${p.lastLogin && now() - t(p.lastLogin) < DAY ? '<span class="chip c-checkout">Logged in today</span>' : ""}${rmChip(p)}<span class="t-owner${own ? " on" : ""} dh-own"><span>Owner</span><b>${own ? esc(own) : "Null"}</b></span></div>
         <div class="dstats">
           <div><span>Value</span><b class="num">${inr(paid || p.value)}</b><small>${paid ? "paid" : p.value ? "in checkout" : "—"}</small></div>
           <div><span>Last seen</span><b>${p.lastSeen ? ago(p.lastSeen) : "—"}</b><small>${p.lastLogin ? "login " + ago(p.lastLogin) : "no login yet"}</small></div>
@@ -784,7 +797,7 @@
           <label>Owner<select class="inp" id="dOwner" ${ro ? "disabled" : ""}>${teamOptions(p.owner).replace(">Nobody<", ">Null (no owner)<")}</select></label>
           ${p.leads?.length && canWrite() ? `<div class="acts dso-acts"><button class="btn small" type="button" data-edit-lead="${esc(p.leads[0].key)}">Edit lead</button></div>` : ""}
         </div>
-        <div class="dtabs">${tabBtn("details", "Details")}${tabBtn("fu", "Follow-ups", openFu.length)}${tabBtn("tl", "Timeline", ev.length)}${ro ? "" : tabBtn("note", "Add note")}</div>
+        <div class="dtabs">${tabBtn("details", "Details")}${tabBtn("fu", "Call remarks", p.remarks.length + "/4")}${tabBtn("tl", "Timeline", ev.length)}${ro ? "" : tabBtn("note", "Add note")}</div>
       </div>
       <div class="db">
         <div class="dpane" data-pane="details"${tab === "details" ? "" : " hidden"}>
@@ -809,13 +822,8 @@
           </dl></div>
         </div>
         <div class="dpane" data-pane="fu"${tab === "fu" ? "" : " hidden"}>
-          ${ro ? "" : `<form class="frm dcard" id="dFu"><h4>Plan a follow-up</h4>
-            <div class="row2"><input class="inp" type="date" id="dFuDate" required aria-label="Date" value="${tomorrow}"><input class="inp" type="time" id="dFuTime" value="11:00" aria-label="Time"></div>
-            <div class="row2"><select class="inp" id="dFuType" aria-label="Type"><option>Call</option><option>WhatsApp</option><option>Demo</option><option>Home visit</option><option>Email</option></select><select class="inp" id="dFuWho" aria-label="Assign to">${teamOptions(p.owner || S.me.email.toLowerCase())}</select></div>
-            <input class="inp" id="dFuNote" placeholder="What to do" aria-label="Note">
-            <button class="btn" type="submit">Schedule follow-up</button>
-          </form>`}
-          <div class="dcard"><h4>Open (${openFu.length})</h4><div class="list">${openFu.length ? openFu.map(fuRow).join("") : '<div class="muted">No open follow-ups.</div>'}</div></div>
+          ${remarksPane(p, ro, tomorrow)}
+          ${openFu.length ? `<div class="dcard"><h4>Upcoming calls (${openFu.length})</h4><div class="list">${openFu.map(fuRow).join("")}</div></div>` : ""}
           ${doneFu.length ? `<details class="dcard"><summary><h4 style="display:inline">Done (${doneFu.length})</h4></summary><div class="list">${doneFu.map(fuRow).join("")}</div></details>` : ""}
         </div>
         <div class="dpane" data-pane="tl"${tab === "tl" ? "" : " hidden"}>
@@ -829,7 +837,36 @@
       </div>
     </aside>`;
   }
-  const openDrawer = (k) => { if (S.open !== k) S.dTab = "details"; S.open = k; renderDrawer(); };
+  function remarksPane(p, ro, tomorrow) {
+    const me = S.me.email.toLowerCase(), by = Object.fromEntries(p.remarks.map((r) => [r.level, r]));
+    const next = p.remarks.length ? Math.max(...p.remarks.map((r) => r.level)) + 1 : 1;
+    const last = p.lastRemark;
+    const sum = last
+      ? `<div class="dcard rm-sum rm-${chanceCls(last.chance)}"><div class="rm-sum-top"><div><h4>Chance of conversion</h4><b class="num">${last.chance}%</b><span>${esc(chanceLbl(last.chance))} · after the ${ORD[last.level]} call</span></div>
+          <div class="rm-trend">${[1, 2, 3, 4].map((n) => by[n] ? `<i class="rm-${chanceCls(by[n].chance)}" title="${ORD[n]} call: ${by[n].chance}%"><em style="height:${Math.max(6, by[n].chance)}%"></em><small>${ORD[n]}</small></i>` : `<i class="rm-empty"><em></em><small>${ORD[n]}</small></i>`).join("")}</div></div>
+          <div class="rm-bar"><span style="width:${last.chance}%"></span></div>
+          <p class="rm-last"><b>Last talk:</b> ${esc(last.outcome)}${last.remark ? " – " + esc(last.remark) : ""}</p></div>`
+      : `<div class="dcard rm-sum rm-none"><h4>Chance of conversion</h4><p class="muted">No calls logged yet. After the 1st call, write what you talked about and how likely they are to buy.</p></div>`;
+    const form = (n, r) => `<form class="frm dcard rm rm-form" id="dRm" data-level="${n}"${r ? ` data-id="${r.id}"` : ""}>
+        <div class="rm-h"><span class="rm-n">${n}</span><b>${ORD[n]} call remark</b>${r ? '<button class="btn small" type="button" data-rm-cancel>Cancel</button>' : ""}</div>
+        <label class="rm-l">How did the call go?<select class="inp" id="dRmOutcome" required>${r ? "" : '<option value="">Choose…</option>'}${OUTCOMES.map(([o]) => `<option${r && r.outcome === o ? " selected" : ""}>${o}</option>`).join("")}</select></label>
+        <div class="rm-l">Chance they will buy<div class="rm-chances">${CHANCES.map(([v, l]) => `<label class="rm-${chanceCls(v)}"><input type="radio" name="rmChance" value="${v}" ${r && r.chance === v ? "checked" : ""} required><span><b>${v}%</b>${l}</span></label>`).join("")}</div></div>
+        <label class="rm-l">What did you talk about?<textarea class="inp" id="dRmText" rows="3" placeholder="e.g. Father, 82 kg, needs it for home and park. Liked the Everyday. Will discuss price with son, call back Saturday.">${r ? esc(r.remark) : ""}</textarea></label>
+        ${!r && n < 4 ? `<div class="rm-l">Next call on <small>(optional, adds a reminder)</small><div class="row2"><input class="inp" type="date" id="dRmNext" value="${tomorrow}"><input class="inp" type="time" id="dRmNextTime" value="11:00"></div><label class="rm-skip"><input type="checkbox" id="dRmNoNext"> No next call needed</label></div>` : ""}
+        <button class="btn primary" type="submit">${r ? "Save changes" : "Save " + ORD[n] + " call remark"}</button>
+      </form>`;
+    const cards = [1, 2, 3, 4].map((n) => {
+      const r = by[n];
+      if (r && S.rmEdit === r.id && !ro) return form(n, r);
+      if (r) return `<div class="dcard rm rm-done"><div class="rm-h"><span class="rm-n">${n}</span><b>${ORD[n]} call</b><span class="rm-pill rm-${chanceCls(r.chance)}">${r.chance}% · ${esc(chanceLbl(r.chance))}</span></div>
+          <div class="rm-out">${esc(r.outcome)}</div>${r.remark ? `<p class="rm-t">${esc(r.remark)}</p>` : ""}
+          <div class="rm-foot"><small>${esc(memberName(r.author_email))} · ${fmtDT(r.called_at)}</small>${!ro && (isAdmin() || r.author_email === me) ? `<button class="btn small" type="button" data-rm-edit="${r.id}">Edit</button>` : ""}</div></div>`;
+      if (n === next && !ro) return form(n, null);
+      return `<div class="dcard rm rm-lock"><div class="rm-h"><span class="rm-n">${n}</span><b>${ORD[n]} call</b><small>${n === next ? "Not logged yet" : "Log the " + ORD[n - 1] + " call first"}</small></div></div>`;
+    }).join("");
+    return sum + cards;
+  }
+  const openDrawer = (k) => { if (S.open !== k) { S.dTab = "details"; S.rmEdit = null; } S.open = k; renderDrawer(); };
   const closeDrawer = () => { S.open = null; $("drawerRoot").innerHTML = ""; };
 
   /* ---------- Writes ---------- */
@@ -1066,7 +1103,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-lead-done],[data-ldone],[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy");
+    const el = e.target.closest("[data-lead-done],[data-ldone],[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy,[data-rm-edit],[data-rm-cancel]");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -1082,6 +1119,8 @@
     if (el.matches("[data-cview]")) { S.cv.view = el.dataset.cview; saveCv(); renderContacts(); return; }
     if (el.matches("[data-cmore]")) { S.more.ctable = (S.more.ctable || 50) + 50; renderContacts(); return; }
     if (el.matches("[data-csort]")) { S.cv.sort = el.dataset.csort; saveCv(); renderContacts(); return; }
+    if (el.matches("[data-rm-edit]")) { S.rmEdit = Number(el.dataset.rmEdit); renderDrawer(); return; }
+    if (el.matches("[data-rm-cancel]")) { S.rmEdit = null; renderDrawer(); return; }
     if (el.matches("[data-dtab]")) { S.dTab = el.dataset.dtab; document.querySelectorAll("#drawerRoot .dtab").forEach((b) => b.classList.toggle("on", b === el)); document.querySelectorAll("#drawerRoot .dpane").forEach((x) => { x.hidden = x.dataset.pane !== S.dTab; }); const db = document.querySelector("#drawerRoot .db"); if (db) db.scrollTop = 0; return; }
     if (el.matches("[data-tl-all]")) { document.querySelectorAll("#drawerRoot .tl-x").forEach((x) => x.classList.remove("tl-x")); el.remove(); return; }
     if (el.matches("[data-box]")) { S.box = el.dataset.box; S.more.box = TILE_STEP; try { localStorage.setItem("pulse-box", S.box); } catch {} render(); $("bxPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
@@ -1115,6 +1154,8 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("modalRoot").innerHTML) $("modalRoot").innerHTML = ""; else if (S.open) closeDrawer(); } });
   document.addEventListener("change", async (e) => {
     const el = e.target;
+    if (el.id === "dRmOutcome") { const o = OUTCOMES.find(([x]) => x === el.value); if (o) { const best = CHANCES.reduce((a, c) => Math.abs(c[0] - o[1]) < Math.abs(a[0] - o[1]) ? c : a); const rb = document.querySelector(`#dRm input[name="rmChance"][value="${o[1] === 100 ? 90 : best[0]}"]`); if (rb && !document.querySelector('#dRm input[name="rmChance"]:checked')) rb.checked = true; } }
+    if (el.id === "dRmNoNext") { const d = $("dRmNext"), tm = $("dRmNextTime"); if (d) d.disabled = el.checked; if (tm) tm.disabled = el.checked; }
     if (el.id === "dStage") { if (await setContact(S.open, { stage: el.value, owner_email: byKey(S.open)?.owner || null })) toast("Stage saved"); }
     if (el.id === "dOwner") { if (await setContact(S.open, { stage: byKey(S.open)?.stage || "new", owner_email: el.value || null })) toast("Owner saved"); }
     if (el.dataset.fuDone) {
@@ -1125,8 +1166,28 @@
   });
   document.addEventListener("submit", async (e) => {
     const f = e.target;
-    if (!["dNote", "dFu", "sForm", "tForm"].includes(f.id)) return;
+    if (!["dNote", "dFu", "sForm", "tForm", "dRm"].includes(f.id)) return;
     e.preventDefault();
+    if (f.id === "dRm") {
+      const key = S.open, p = byKey(key), level = Number(f.dataset.level), me = S.me.email.toLowerCase();
+      const outcome = $("dRmOutcome").value, ch = f.querySelector('input[name="rmChance"]:checked');
+      if (!outcome || !ch) { toast("Choose how the call went and the chance of buying"); return; }
+      const row = { outcome, chance: Number(ch.value), remark: $("dRmText").value.trim(), updated_at: new Date().toISOString() };
+      const btn = f.querySelector('button[type="submit"]'); if (btn) btn.disabled = true;
+      const { error } = f.dataset.id ? await sb.from("crm_call_remarks").update(row).eq("id", f.dataset.id) : await sb.from("crm_call_remarks").insert({ key, level, ...row, author_email: me });
+      if (error) { if (btn) btn.disabled = false; toast("Couldn't save: " + (/duplicate/i.test(error.message) ? "someone already logged this call. Refresh and try again." : error.message)); return; }
+      if (!f.dataset.id) {
+        const nx = $("dRmNext"), noNext = $("dRmNoNext")?.checked;
+        if (nx && nx.value && !noNext && level < 4) await addFollowup(key, { due_at: new Date(nx.value + "T" + ($("dRmNextTime").value || "11:00")).toISOString(), kind: "Call", note: `${ORD[level + 1]} call`, assignee_email: p?.owner || me, created_by: me });
+        for (const fu of (p?.followups || []).filter((x) => !x.done && x.kind === "Call" && t(x.due_at) <= now() + DAY)) await sb.from("crm_followups").update({ done: true, done_at: new Date().toISOString() }).eq("id", fu.id);
+        const stage = outcome === "Bought / converted" ? "won" : outcome === "Not interested" && level >= 2 ? (p?.stage || "contacted") : outcome === "Wants a demo / visit" ? "demo" : row.chance >= 70 ? "interested" : "contacted";
+        if (p && (["new", "contacted"].includes(p.stage) || stage === "won")) await setContact(key, { stage, owner_email: p.owner || me });
+      }
+      S.rmEdit = null;
+      toast(f.dataset.id ? "Remark updated" : `${ORD[level]} call remark saved`);
+      await reload("remarks"); await reload("followups");
+      if (S.open === key) renderDrawer();
+    }
     if (f.id === "dNote") {
       const body = $("dNoteText").value.trim(); if (!body) return;
       const { error } = await sb.from("crm_notes").insert({ key: S.open, body, author_email: S.me.email.toLowerCase() });
@@ -1192,6 +1253,7 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_contacts" }, () => reload("contacts"))
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_notes" }, () => reload("notes"))
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_followups" }, () => reload("followups"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "crm_call_remarks" }, () => reload("remarks"))
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_leads" }, (p) => { reload("leads"); if (p.eventType === "INSERT" && p.new?.origin === "form") notify("New website enquiry", `${p.new.name}${p.new.phone ? " · " + p.new.phone : ""} · ${p.new.kind}`); })
       .on("postgres_changes", { event: "*", schema: "public", table: "crm_sync_log" }, (p) => { if (p.new?.finished_at && p.new?.ok) loadAll(); else reload("sync"); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "store_events" }, (p) => {
