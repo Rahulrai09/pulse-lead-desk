@@ -33,6 +33,7 @@
   }
   const digits = (p) => String(p || "").replace(/\D/g, "");
   function waNum(p) { let d = digits(p); if (d.length === 10) d = "91" + d; if (d.length === 11 && d[0] === "0") d = "91" + d.slice(1); return d; }
+  try { S.pipeOwner = localStorage.getItem("pulse-pipe-owner") || "all"; } catch {}
   const canWrite = () => S.role === "admin" || S.role === "sales";
   const isAdmin = () => S.role === "admin";
   function toast(msg) { const el = $("toast"); el.textContent = msg; el.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (el.hidden = true), 2400); }
@@ -661,11 +662,35 @@
       <td class="d">${p.nextFU ? `<span class="${fuOver ? "chip c-notconverted" : "fu-next"}">${fuOver ? "Overdue · " : ""}${esc(p.nextFU.kind)} · ${fmtDT(p.nextFU.due_at)}</span>` : '<span class="sub">—</span>'}</td></tr>`; }).join("") : `<tr><td colspan="9" class="empty">No contacts match.</td></tr>`;
     $("cMore").innerHTML = rows.length > shown ? `<button class="btn small" type="button" data-cmore>View more (${rows.length - shown})</button>` : "";
   }
+  const STAGE_HINT = { new: "Not called yet", contacted: "Spoken to at least once", interested: "Wants to buy", demo: "Demo or home visit booked", won: "Bought", lost: "Not buying" };
   function renderPipeline() {
+    const me = S.me.email.toLowerCase(), f = S.pipeOwner || "all";
+    const pool = S.contacts.filter((p) => f === "all" || (f === "none" ? !p.owner : p.owner === f));
+    const owners = S.raw.team.filter((m) => m.active && m.role !== "viewer");
+    $("pipeBar").innerHTML = `<label class="pipe-f">Showing<select class="inp mini" id="pipeOwner">
+        <option value="all"${f === "all" ? " selected" : ""}>Everyone's leads</option>
+        <option value="${esc(me)}"${f === me ? " selected" : ""}>My leads</option>
+        ${owners.filter((m) => m.email !== me).map((m) => `<option value="${esc(m.email)}"${f === m.email ? " selected" : ""}>${esc(m.name || m.email)}</option>`).join("")}
+        <option value="none"${f === "none" ? " selected" : ""}>No owner yet</option></select></label>
+      <div class="pipe-tot"><span><b class="num">${pool.length}</b>contacts</span><span><b class="num">${pool.filter((p) => p.lastRemark && p.lastRemark.chance >= 70 && !["won", "lost"].includes(p.stage)).length}</b>hot (70%+ chance)</span><span><b class="num">${pool.filter((p) => !p.lastRemark && !["won", "lost"].includes(p.stage)).length}</b>not called yet</span></div>`;
+    const rank = (p) => (p.lastRemark ? p.lastRemark.chance : -1);
     $("board").innerHTML = STAGES.map(([id, label]) => {
-      const items = S.contacts.filter((p) => p.stage === id);
-      return `<div class="col"><h3><span>${label}</span><span class="num">${items.length}</span></h3>${items.slice(0, 100).map((p) => `
-        <button class="card" type="button" data-open="${p.key}"><b>${esc(p.name)}</b>${chip(p)}<small>${esc(p.cart || p.phone || p.email || "")}</small>${p.value ? `<small class="num">${inr(p.value)}</small>` : ""}${p.owner ? `<small>Owner: ${esc(memberName(p.owner))}</small>` : ""}</button>`).join("") || '<small class="muted" style="padding:4px">Empty</small>'}</div>`;
+      const items = pool.filter((p) => p.stage === id).sort((a, b) => rank(b) - rank(a) || Math.max(t(b.lastActive), t(b.lastCheckout)) - Math.max(t(a.lastActive), t(a.lastCheckout)));
+      const val = items.reduce((s, p) => s + Number(p.value || 0), 0);
+      const cards = items.slice(0, 150).map((p) => {
+        const r = p.lastRemark, own = p.owner ? memberName(p.owner) : "";
+        const what = [p.cart, p.value ? inr(p.value) : ""].filter(Boolean).join(" · ") || p.phone || p.email || "";
+        return `<button class="pcard" type="button" data-open="${p.key}">
+          <span class="pc-name">${esc(p.name)}</span>
+          <span class="pc-chips">${chip(p)}${r ? `<span class="rm-pill rm-${chanceCls(r.chance)}">${r.chance}%</span>` : ""}</span>
+          ${what ? `<span class="pc-what">${esc(what)}</span>` : ""}
+          <span class="pc-call${r ? "" : " pc-none"}">${r ? `<b>${ORD[r.level]} call:</b> ${esc(r.outcome)} · ${ago(r.called_at)}` : "No call logged yet"}</span>
+          <span class="pc-own${own ? "" : " pc-nobody"}"><i>${own ? esc(initials(own)) : "?"}</i>${own ? esc(own) : "No owner"}</span>
+        </button>`;
+      }).join("");
+      return `<div class="pcol pcol-${id}"><div class="pcol-h"><div><b>${label}</b><small>${STAGE_HINT[id]}</small></div><span class="pcol-n num">${items.length}</span></div>
+        ${val ? `<div class="pcol-v">${inr(val)} total</div>` : ""}
+        <div class="pcol-list">${cards || '<div class="pcol-empty">No one here</div>'}</div></div>`;
     }).join("");
   }
   const K_FILTERS = [["all", "All"], ["fresh", "Last 48 h"], ["open", "Not converted"], ["done", "Completed"]];
@@ -1154,6 +1179,7 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("modalRoot").innerHTML) $("modalRoot").innerHTML = ""; else if (S.open) closeDrawer(); } });
   document.addEventListener("change", async (e) => {
     const el = e.target;
+    if (el.id === "pipeOwner") { S.pipeOwner = el.value; try { localStorage.setItem("pulse-pipe-owner", el.value); } catch {} renderPipeline(); return; }
     if (el.id === "dRmOutcome") { const o = OUTCOMES.find(([x]) => x === el.value); if (o) { const best = CHANCES.reduce((a, c) => Math.abs(c[0] - o[1]) < Math.abs(a[0] - o[1]) ? c : a); const rb = document.querySelector(`#dRm input[name="rmChance"][value="${o[1] === 100 ? 90 : best[0]}"]`); if (rb && !document.querySelector('#dRm input[name="rmChance"]:checked')) rb.checked = true; } }
     if (el.id === "dRmNoNext") { const d = $("dRmNext"), tm = $("dRmNextTime"); if (d) d.disabled = el.checked; if (tm) tm.disabled = el.checked; }
     if (el.id === "dStage") { if (await setContact(S.open, { stage: el.value, owner_email: byKey(S.open)?.owner || null })) toast("Stage saved"); }
