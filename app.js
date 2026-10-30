@@ -139,6 +139,7 @@
       S.loaded = true;
       syncStatus();
       render();
+      loadVisitRange(true);
     } catch (e) {
       setSync("err", "Couldn't load");
       banner("bad", `<p>Couldn't load data: ${esc(e.message || e)}. Check your connection and press Refresh.</p>`);
@@ -322,11 +323,11 @@
       <select class="inp mini" id="pSel" aria-label="Date range">${PRESETS.map(([v, l]) => `<option value="${v}" ${P.p === v ? "selected" : ""}>${l}</option>`).join("")}
         <optgroup label="Year">${years.map((y) => `<option value="y${y}" ${P.p === "y" + y ? "selected" : ""}>${y}</option>`).join("")}</optgroup></select>
       <span class="pcustom" ${P.p === "custom" ? "" : "hidden"}><label>From <input class="inp mini" type="datetime-local" id="pFrom" value="${esc(P.from)}"></label><label>To <input class="inp mini" type="datetime-local" id="pTo" value="${esc(P.to)}"></label></span>
-      ${P.p !== "all" ? `<span class="pnow">${esc(periodLabel())}</span><button class="btn small" type="button" id="pClear">Clear</button>` : `<span class="pnow muted">Filters the add-to-cart feed, contacts, checkouts, orders and schedule</span>`}`;
+      ${P.p !== "all" ? `<span class="pnow">${esc(periodLabel())}</span><button class="btn small" type="button" id="pClear">Clear</button>` : `<span class="pnow muted">Changes every box below, plus contacts, checkouts, orders and schedule</span>`}`;
     $("period").hidden = S.view === "team" || S.view === "pipeline";
     $("newLeadBtn").hidden = !canWrite();
   }
-  function setPeriod(p) { Object.assign(S.period, p); S.rep = null; try { localStorage.setItem("pulse-crm-period", JSON.stringify(S.period)); } catch {} render(); }
+  function setPeriod(p) { Object.assign(S.period, p); S.rep = null; try { localStorage.setItem("pulse-crm-period", JSON.stringify(S.period)); } catch {} render(); loadVisitRange(); }
   try { const sp = JSON.parse(localStorage.getItem("pulse-crm-period") || "null"); if (sp && sp.p) S.period = sp; } catch {}
   document.addEventListener("submit", (e) => { if (e.target.id === "leadForm") { e.preventDefault(); saveLead(); } });
   document.addEventListener("input", (e) => { if (["tlUrl", "tlCmp"].includes(e.target.id)) makeLink(); });
@@ -414,23 +415,40 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000); toast("CSV downloaded");
   }
   function li(p, sub, link = false) { return `<div class="li"><div class="who" data-open="${p.key}" style="cursor:pointer"><b>${esc(p.name)} ${chip(p)}</b><small>${sub}</small></div>${actions(p, link)}</div>`; }
+  /* Each box keeps its usual window (e.g. last 7 days) for "All time", and follows the chosen date range otherwise. */
+  const isAll = () => S.period.p === "all";
+  const win = (d, ms) => !!d && (isAll() ? (ms ? now() - t(d) < ms : true) : inRange(d));
+  async function loadVisitRange(force) {
+    if (isAll()) { S.vr = null; return; }
+    const key = JSON.stringify(S.period); if (!force && S.vr && S.vr.key === key) return;
+    const [a, b] = periodBounds();
+    if (!(S.vr && S.vr.key === key && !S.vr.loading)) S.vr = { key, loading: true };
+    const { data } = await sb.rpc("crm_visit_range", { p_from: isFinite(a) ? new Date(a).toISOString() : null, p_to: isFinite(b) ? new Date(b).toISOString() : null }).then((r) => r, () => ({ data: null }));
+    if (S.vr && S.vr.key === key) { S.vr = { key, ...(data || { visits: 0, visitors: 0 }) }; if (S.view === "overview") render(); }
+  }
   function boxData() {
-    const C = S.contacts, ck = S.ck;
+    const C = S.contacts, ck = S.ck, all = isAll(), lbl = all ? "" : periodLabel();
+    const paidIn = (p) => p.orders.some((o) => !o.cancelled_at && ["PAID", "PARTIALLY_REFUNDED"].includes(o.financial) && win(o.created_at));
     const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => S.period.p === "all" ? now() - t(x.created_at) < 14 * DAY : inRange(x.created_at));
     const lastOrder = (p) => p.orders.find((o) => !o.cancelled_at)?.created_at;
     const byAt = (arr) => arr.sort((a, b) => t(b.at) - t(a.at));
-    const ckP = new Map(); for (const k of ck) { if (now() - t(k.created_at) >= 2 * DAY) continue; const p = byKey(k.customer_id ? "c" + k.customer_id : "g" + k.id); if (p && !ckP.has(p.key)) ckP.set(p.key, { p, at: k.created_at, link: !k.completed_at, line: `<b>${esc(k.items || "Checkout")}</b> · ${inr(k.total)} · ${k.completed_at ? "Completed" : "Not paid yet"}` }); }
-    const hot = C.filter((p) => (p.status === "notconverted" || p.status === "checkout") && now() - t(p.lastCheckout) < 14 * DAY);
-    const fu = allFollowups().filter((f) => !f.done && t(f.due_at) < endOfToday());
+    const ckP = new Map(); for (const k of ck) { if (!win(k.created_at, 2 * DAY)) continue; const p = byKey(k.customer_id ? "c" + k.customer_id : "g" + k.id); if (p && !ckP.has(p.key)) ckP.set(p.key, { p, at: k.created_at, link: !k.completed_at, line: `<b>${esc(k.items || "Checkout")}</b> · ${inr(k.total)} · ${k.completed_at ? "Completed" : "Not paid yet"}` }); }
+    const hot = C.filter((p) => (p.status === "notconverted" || p.status === "checkout") && win(p.lastCheckout, 14 * DAY));
+    const fu = allFollowups().filter((f) => !f.done && (all ? t(f.due_at) < endOfToday() : inRange(f.due_at)));
+    const notConv = C.filter((p) => p.status === "notconverted" && win(p.lastCheckout));
+    const conv = C.filter((p) => p.status === "converted" && (all || paidIn(p)));
+    const pend = C.filter((p) => (p.status === "pending" || p.statusText === "Converted · to ship") && win(p.orders.find((o) => !o.cancelled_at)?.created_at || p.lastActive));
+    const inPeriod = (p) => all || [p.createdAt, p.lastActive, p.lastCheckout, p.lastLogin, p.orders[0]?.created_at, ...(p.leads || []).map((x) => x.created_at)].some((d) => d && inRange(d));
+    const tot = C.filter(inPeriod);
     return [
-      { id: "fresh", label: "Fresh sign-ups", sub: "new accounts, last 7 days", empty: "No new sign-ups this week.", items: byAt(C.filter((p) => p.fresh).map((p) => ({ p, at: p.createdAt, line: `Joined ${fmtDT(p.createdAt)}` }))) },
-      { id: "loggedin", label: "Logged in this week", sub: "customers seen logging in", empty: "No logins this week.", items: byAt(C.filter((p) => p.lastLogin && now() - t(p.lastLogin) < 7 * DAY).map((p) => ({ p, at: p.lastLogin, line: `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days` }))) },
-      { id: "freshck", label: "Fresh checkouts", sub: "started in the last 48 h", empty: "No checkouts in the last 48 hours.", items: byAt([...ckP.values()]) },
-      { id: "converted", label: "Converted", sub: "people who paid", cls: "k-good", empty: "No paid orders yet.", items: byAt(C.filter((p) => p.status === "converted").map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${p.orders.length} order${p.orders.length === 1 ? "" : "s"}</b> · ${inr(p.value)} paid` }))) },
-      { id: "notconverted", label: "Not converted", sub: `${inr(C.filter((p) => p.status === "notconverted").reduce((s, p) => s + p.value, 0))} left in checkout`, cls: "k-bad", empty: "Nobody has left a checkout unpaid.", items: byAt(C.filter((p) => p.status === "notconverted").map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
-      { id: "pending", label: "Pending", sub: "payment pending or to ship", cls: "k-warn", empty: "Nothing pending.", items: byAt(C.filter((p) => p.status === "pending" || p.statusText === "Converted · to ship").map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${esc(p.statusText)}</b> · ${inr(p.value)}` }))) },
-      { id: "due", label: "Due today", sub: "follow-ups due or overdue", cls: fu.length ? "k-warn" : "", empty: "No follow-ups due today.", items: fu.map((f) => { const p = byKey(f.key); return p && { p, at: f.due_at, line: `<b>${esc(f.kind)}</b>${t(f.due_at) < now() ? " · overdue" : ""}`, note: f.note || "", kv: [["Assigned", f.assignee_email ? memberName(f.assignee_email) : ""]] }; }).filter(Boolean) },
-      { id: "total", label: "Total contacts", sub: `${S.raw.customers.length} accounts · ${C.filter((p) => p.leads?.length).length} leads`, empty: "No contacts yet.", items: byAt(C.map((p) => ({ p, at: p.lastActive || p.createdAt, line: `<b>${esc(p.statusText)}</b>${p.value ? " · " + inr(p.value) : ""}` }))) },
+      { id: "fresh", label: all ? "Fresh sign-ups" : "New sign-ups", sub: all ? "new accounts, last 7 days" : "new accounts · " + lbl, empty: all ? "No new sign-ups this week." : "No new sign-ups in this period.", items: byAt(C.filter((p) => p.source === "customer" && win(p.createdAt, 7 * DAY)).map((p) => ({ p, at: p.createdAt, line: `Joined ${fmtDT(p.createdAt)}` }))) },
+      { id: "loggedin", label: all ? "Logged in this week" : "Logged in", sub: all ? "customers seen logging in" : "customers who logged in · " + lbl, empty: all ? "No logins this week." : "No logins in this period.", items: byAt(C.filter((p) => p.logins.some((l) => win(l.created_at, 7 * DAY))).map((p) => ({ p, at: (p.logins.find((l) => win(l.created_at, 7 * DAY)) || {}).created_at || p.lastLogin, line: `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days` }))) },
+      { id: "freshck", label: all ? "Fresh checkouts" : "Checkouts", sub: all ? "started in the last 48 h" : "started · " + lbl, empty: all ? "No checkouts in the last 48 hours." : "No checkouts in this period.", items: byAt([...ckP.values()]) },
+      { id: "converted", label: "Converted", sub: all ? "people who paid" : "paid · " + lbl, cls: "k-good", empty: all ? "No paid orders yet." : "No paid orders in this period.", items: byAt(conv.map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${p.orders.length} order${p.orders.length === 1 ? "" : "s"}</b> · ${inr(p.value)} paid` }))) },
+      { id: "notconverted", label: "Not converted", sub: `${inr(notConv.reduce((s, p) => s + p.value, 0))} left in checkout${all ? "" : " · " + lbl}`, cls: "k-bad", empty: all ? "Nobody has left a checkout unpaid." : "No unpaid checkouts in this period.", items: byAt(notConv.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
+      { id: "pending", label: "Pending", sub: all ? "payment pending or to ship" : "pending or to ship · " + lbl, cls: "k-warn", empty: "Nothing pending.", items: byAt(pend.map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${esc(p.statusText)}</b> · ${inr(p.value)}` }))) },
+      { id: "due", label: all ? "Due today" : "Follow-ups", sub: all ? "follow-ups due or overdue" : "open, due · " + lbl, cls: fu.length ? "k-warn" : "", empty: "No follow-ups due today.", items: fu.map((f) => { const p = byKey(f.key); return p && { p, at: f.due_at, line: `<b>${esc(f.kind)}</b>${t(f.due_at) < now() ? " · overdue" : ""}`, note: f.note || "", kv: [["Assigned", f.assignee_email ? memberName(f.assignee_email) : ""]] }; }).filter(Boolean) },
+      { id: "total", label: all ? "Total contacts" : "Active contacts", sub: `${tot.filter((p) => p.source === "customer").length} accounts · ${tot.filter((p) => p.leads?.length).length} leads${all ? "" : " · " + lbl}`, empty: all ? "No contacts yet." : "No contact activity in this period.", items: byAt(tot.map((p) => ({ p, at: p.lastActive || p.createdAt, line: `<b>${esc(p.statusText)}</b>${p.value ? " · " + inr(p.value) : ""}` }))) },
       (() => {
         // An enquiry is done once that person has paid, or the team marked the stage Won/Lost.
         // Done only counts what happened AFTER this enquiry: a paid order placed after it, or the stage set to Won/Lost after it.
@@ -447,15 +465,18 @@
           empty: S.leadsDone ? "No finished enquiries yet." : "No pending enquiries. Leads you add and website forms (rent, donate, demo, contact) appear here.",
           items: show.map(({ p, x, done: d, why }) => ({ p, leadKey: x.key, lead: x, owner: x.owner_email || "", at: x.created_at, line: `<b>${esc(x.kind)}</b> · ${esc(x.source || "")}${d ? ` · <span style="color:var(--good)">Done (${esc(why)})</span>` : ""}`, kv: [["Wants", x.interest || ""]], note: x.note || "" })) };
       })(),
-      { id: "browse", label: "Browsing now", sub: "on the store, last 30 min", empty: "Nobody is on the store right now.", items: browseItems() },
+      { id: "browse", label: "Browsing now", sub: all ? "on the store, last 30 min" : "live, last 30 min (not date-filtered)", empty: "Nobody is on the store right now.", items: browseItems() },
       (() => {
         const v = S.vt || {}, n = (x) => Number(x || 0).toLocaleString("en-IN");
+        const r = S.vr;
+        if (!all) return { id: "visits", label: "Visits", value: r && !r.loading ? n(r.visits) : "…", sub: r && !r.loading ? `${n(r.visitors)} visitors · ${lbl}` : "Counting… · " + lbl,
+          panelTitle: "Visitors", panelSub: "people who visited in this period (list covers up to the last 14 days), latest first", empty: "No visits in this period.", items: visitItems() };
         return { id: "visits", label: "Total visits", value: n(v.all_visits), sub: `${n(v.today_visits)} today · ${n(v.d7_visits)} in 7 days · ${n(v.all_visitors)} visitors`,
           panelTitle: "Visitors", panelSub: "people who visited in the last 14 days, latest first · count = visits per person",
           empty: "No visits recorded yet.", items: visitItems() };
       })(),
       { id: "carts", label: "Live add to cart", sub: S.period.p === "all" ? "last 48 h" : periodLabel(), empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
-      { id: "hot", label: "Hot leads", sub: "unpaid checkouts, 14 days", cls: "k-bad", empty: "No unconverted checkouts in the last 14 days.", items: byAt(hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
+      { id: "hot", label: "Hot leads", sub: all ? "unpaid checkouts, 14 days" : "unpaid checkouts · " + lbl, cls: "k-bad", empty: "No unconverted checkouts in the last 14 days.", items: byAt(hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
     ];
   }
   // Box filters: owner, date range (with time), weekday, month.
@@ -575,7 +596,7 @@
   function visitItems() {
     const byP = new Map();
     for (const e of S.raw.events) {
-      if (e.kind !== "visit") continue; const c = evPerson(e);
+      if (e.kind !== "visit" || (!isAll() && !inRange(e.created_at))) continue; const c = evPerson(e);
       const cur = byP.get(c) || { c, last: e, first: e, pages: new Set(), n: 0, devices: new Set() };
       if (t(e.created_at) > t(cur.last.created_at)) cur.last = e;
       if (t(e.created_at) < t(cur.first.created_at)) cur.first = e;
