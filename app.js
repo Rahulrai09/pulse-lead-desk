@@ -585,7 +585,7 @@
   function cartLine(ev) {
     const m = ev.meta || {}, w = cartWho(ev);
     const what = ev.kind === "checkout"
-      ? `${ev.added ? "Added to cart → " : ""}Started checkout${m.n ? " · " + m.n + " item" + (m.n === 1 ? "" : "s") : ""}${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}`
+      ? `${ev.buyNow ? "Buy now → " : ev.added ? "Added to cart → " : ""}Started checkout${m.n ? " · " + m.n + " item" + (m.n === 1 ? "" : "s") : ""}${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}`
       : `Added ${esc(m.t || "a product")}${m.vt && m.vt !== "Default Title" ? " (" + esc(m.vt) + ")" : ""}${m.q > 1 ? " ×" + m.q : ""}${m.a ? " · " + inr(m.a * (m.q || 1)) : ""}`;
     const contact = !w.p && (m.ph || m.em) ? ` · ${esc(m.ph || m.em)}` : "";
     const head = `<b>${esc(w.name)} <span class="chip ${w.tag.startsWith("Guest") ? "c-signup" : w.tag.startsWith("New") ? "c-checkout" : "c-converted"}">${esc(w.tag)}</span></b>`;
@@ -602,7 +602,7 @@
       for (const c of all) {
         if (c.kind !== "cart" || hide.has(c.id) || evPerson(c) !== evPerson(ck)) continue;
         const dt = t(ck.created_at) - t(c.created_at);
-        if (dt >= -5e3 && dt < 30 * 60e3 && (!c.meta?.t || title.includes(c.meta.t))) { hide.add(c.id); ck.added = true; }
+        if (dt >= -5e3 && dt < 30 * 60e3 && (!c.meta?.t || title.includes(c.meta.t))) { hide.add(c.id); ck.added = true; if (String(c.path || "").startsWith("/checkouts")) ck.buyNow = true; }
       }
     }
     return all.filter((e) => !hide.has(e.id));
@@ -662,7 +662,7 @@
     const people = new Set(evs.map(evPerson)).size, nCart = evs.filter((e) => e.kind === "cart" || e.added).length, nCk = evs.filter((e) => e.kind === "checkout").length;
     return evs.slice(0, 300).map((ev) => {
       const m = ev.meta || {}, w = cartWho(ev);
-      const what = ev.kind === "checkout" ? `<b>Started checkout</b>${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}` : `Added <b>${esc(m.t || "a product")}</b>${m.q > 1 ? " ×" + m.q : ""}${m.a ? " · " + inr(m.a * (m.q || 1)) : ""}`;
+      const what = ev.kind === "checkout" ? `<b>${ev.buyNow ? "Buy now → checkout" : "Started checkout"}</b>${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}` : `Added <b>${esc(m.t || "a product")}</b>${m.q > 1 ? " ×" + m.q : ""}${m.a ? " · " + inr(m.a * (m.q || 1)) : ""}`;
       const cls = w.tag.startsWith("Guest") ? "c-signup" : w.tag.startsWith("New") ? "c-checkout" : "c-converted";
       return { p: w.p, name: w.name, chip: `<span class="chip ${cls}">${esc(w.tag)}</span>`, at: ev.created_at, line: what, link: ev.kind === "checkout", kv: w.p ? [] : [["Contact", m.ph || m.em || ""], ["Device", ev.device || ""]] };
     });
