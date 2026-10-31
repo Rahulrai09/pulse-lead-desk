@@ -1,0 +1,45 @@
+{%- comment -%}
+  Pulse: a short "who we are" block for the home page. Gives Google, AI assistants and visitors a clear,
+  plain statement of what pulsemotion.in is. The page's main heading (H1) lives here.
+{%- endcomment -%}
+<style>
+  .pab{max-width:1100px;margin:4rem auto 0;padding:0 1.5rem;font-family:var(--pulse-font-sans,system-ui,sans-serif);}
+  .pab__card{position:relative;overflow:hidden;display:grid;grid-template-columns:1.1fr 1fr;gap:2rem;align-items:center;padding:2.25rem 2.5rem;border-radius:26px;background:#fff;border:1px solid #E4E9F0;box-shadow:0 30px 60px -40px rgba(15,30,54,.35);}
+  .pab__card:before{content:'';position:absolute;width:280px;height:280px;right:-110px;top:-120px;border-radius:50%;border:1.5px solid rgba(238,139,27,.35);pointer-events:none;}
+  .pab__k{display:inline-flex;align-items:center;gap:.6rem;font-size:.72rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#EE8B1B;}
+  .pab__k:before{content:'';width:28px;height:1.5px;background:currentColor;}
+  .pab h1{margin:.6rem 0 .8rem;font-size:clamp(1.5rem,2.8vw,2.1rem);line-height:1.2;letter-spacing:-.02em;color:#0F1E36;font-weight:700;}
+  .pab p{margin:0;font-size:1rem;line-height:1.7;color:#4A5870;}
+  .pab ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:.7rem;}
+  .pab li{display:flex;gap:.6rem;align-items:flex-start;padding:.85rem .9rem;border-radius:14px;background:#F5F7FA;line-height:1.4;color:#0F1E36;}
+  .pab li b{display:block;font-size:.95rem;}
+  .pab li span{color:#5B6B82;font-size:.8rem;}
+  .pab li i{flex-shrink:0;width:9px;height:9px;margin-top:.4rem;border-radius:50%;background:#EE8B1B;box-shadow:0 0 0 4px #FFF1E2;}
+  @media (max-width:749px){.pab{margin-top:2.5rem;padding:0 1rem;}.pab__card{grid-template-columns:1fr;padding:1.6rem 1.3rem;border-radius:20px;gap:1.2rem;}.pab ul{gap:.5rem;}.pab li{padding:.7rem;}}
+</style>
+<section class="pab" aria-labelledby="pab-h">
+  <div class="pab__card">
+    <div>
+      <span class="pab__k">About Pulse Motion</span>
+      <h1 id="pab-h">{{ section.settings.heading }}</h1>
+      <p>{{ section.settings.text }}</p>
+    </div>
+    <ul>
+      <li><i></i><div><b>11 models</b><span>Lightweight, travel, recliner and heavy-duty</span></div></li>
+      <li><i></i><div><b>Free delivery</b><span>Across India, usually 3–5 days</span></div></li>
+      <li><i></i><div><b>1-year warranty</b><span>Plus home service and genuine spares</span></div></li>
+      <li><i></i><div><b>Based in Bengaluru</b><span>HSR Layout · +91 90711 01108</span></div></li>
+    </ul>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Pulse about",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading (main page heading)", "default": "Pulse Motion: the official online store for Pulse electric wheelchairs" },
+    { "type": "textarea", "id": "text", "label": "Text", "default": "Pulse Motion is the electric wheelchair brand of Zuvio Technologies Private Limited, Bengaluru, and pulsemotion.in is its official online store, where you buy direct from the company. Choose from lightweight and foldable chairs from 19 kg, IATA-compliant travel chairs, 160° recliners and heavy-duty chairs for users up to 140 kg, with free delivery across India, EMI, rentals and expert advice on WhatsApp. For medical equipment beyond wheelchairs, see our sister brand Pulseio (pulseio.in)." }
+  ],
+  "presets": [{ "name": "Pulse about" }]
+}
+{% endschema %}
