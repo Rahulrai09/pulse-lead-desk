@@ -1,0 +1,219 @@
+{%- comment -%}
+  Pulse: structured data (schema.org JSON-LD) that Google, Bing and AI assistants read.
+  - Every page: Organization (who Pulse is, address, phone, social pages) + WebSite.
+  - Product pages: Product with price, MRP, stock, images, free delivery and 7-day returns,
+    plus star ratings and the reviews themselves (up to 5, with photos) once real Judge.me reviews exist (never invented).
+  - Product and category pages: breadcrumbs.
+  FAQ data is already output by the FAQ sections themselves.
+{%- endcomment -%}
+{%- liquid
+  assign sd_org_id = request.origin | append: '/#organization'
+  assign sd_logo = 'pulse-favicon.png' | asset_url | prepend: 'https:'
+  if shop.brand.logo != blank
+    assign sd_logo = shop.brand.logo | image_url: width: 600 | prepend: 'https:'
+  endif
+  assign sd_same = 'https://pulseio.in'
+  assign sd_keys = 'social_facebook_link,social_instagram_link,social_youtube_link,social_linkedin_link,social_twitter_link,social_pinterest_link' | split: ','
+  for sd_key in sd_keys
+    assign sd_link = settings[sd_key]
+    if sd_link != blank and sd_link.size > 5
+      assign sd_same = sd_same | append: '|' | append: sd_link
+    endif
+  endfor
+  assign sd_same = sd_same | split: '|'
+-%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": ["Organization", "LocalBusiness"],
+  "@id": {{ sd_org_id | json }},
+  "name": "Pulse",
+  "alternateName": ["Pulse Motion", "pulsemotion.in", "Pulse Wheelchairs", "Pulse Mobility & Care", "Pulse Medical Equipment Manufacturer"],
+  "description": "Pulse Motion (pulsemotion.in) is the official online store of Pulse, a Bengaluru electric wheelchair brand. It sells lightweight, foldable, travel (IATA compliant) and heavy-duty electric wheelchairs with free delivery across India, 1-year warranty and home service.",
+  "brand": { "@type": "Brand", "name": "Pulse" },
+  "knowsAbout": ["Electric wheelchairs", "Power wheelchairs", "Foldable wheelchairs", "Travel wheelchairs", "Mobility aids"],
+  "url": {{ request.origin | append: '/' | json }},
+  "logo": {{ sd_logo | json }},
+  "image": {{ sd_logo | json }},
+  "telephone": "+91-9071101108",
+  "email": "socialmedia@pulseio.in",
+  "priceRange": "₹₹₹",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "1st Floor, Plot No. 646, 27th Main Road, Sector 1, HSR Layout",
+    "addressLocality": "Bengaluru",
+    "addressRegion": "Karnataka",
+    "postalCode": "560102",
+    "addressCountry": "IN"
+  },
+  "areaServed": { "@type": "Country", "name": "India" },
+  "contactPoint": [{
+    "@type": "ContactPoint",
+    "telephone": "+91-9071101108",
+    "contactType": "customer service",
+    "areaServed": "IN",
+    "availableLanguage": ["English", "Hindi", "Kannada"]
+  }],
+  "sameAs": {{ sd_same | json }}
+}
+</script>
+{%- if request.page_type == 'index' -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": {{ request.origin | append: '/#website' | json }},
+  "name": "Pulse Motion",
+  "alternateName": ["pulsemotion.in", "Pulse Electric Wheelchairs", "Pulse Motion – Official Pulse Store"],
+  "description": "Official online store of Pulse electric wheelchairs in India.",
+  "url": {{ request.origin | append: '/' | json }},
+  "inLanguage": "en-IN",
+  "publisher": { "@id": {{ sd_org_id | json }} }
+}
+</script>
+{%- endif -%}
+
+{%- if request.page_type == 'product' and product -%}
+  {%- liquid
+    assign sd_url = request.origin | append: product.url
+    assign sd_desc = product.description | strip_html | strip_newlines | replace: '  ', ' ' | strip | truncate: 4900
+    if sd_desc == blank
+      assign sd_desc = product.metafields.global.description_tag.value | default: product.title
+    endif
+    assign sd_brand = 'Pulse'
+    assign sd_valid = 'now' | date: '%Y' | plus: 1 | append: '-12-31'
+    assign sd_rv = product.metafields.judgeme.review_widget_data.value
+    assign sd_count = sd_rv.number_of_reviews | default: 0 | plus: 0
+    assign sd_avg = sd_rv.average_rating | default: 0
+    if sd_count == 0 and product.metafields.reviews.rating_count != blank
+      assign sd_count = product.metafields.reviews.rating_count.value | plus: 0
+      assign sd_avg = product.metafields.reviews.rating.value.rating
+    endif
+  -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "@id": {{ sd_url | append: '#product' | json }},
+  "name": {{ product.title | json }},
+  "url": {{ sd_url | json }},
+  "description": {{ sd_desc | json }},
+  "brand": { "@type": "Brand", "name": {{ sd_brand | json }} },
+  "manufacturer": { "@id": {{ sd_org_id | json }} },
+  {%- if product.type != blank %}
+  "category": {{ product.type | json }},
+  {%- endif %}
+  {%- if product.metafields.pulse.model_name != blank %}
+  "model": {{ product.metafields.pulse.model_name.value | json }},
+  {%- endif %}
+  {%- if product.selected_or_first_available_variant.sku != blank %}
+  "sku": {{ product.selected_or_first_available_variant.sku | json }},
+  "mpn": {{ product.selected_or_first_available_variant.sku | json }},
+  {%- endif %}
+  "image": [
+    {%- for img in product.images limit: 8 -%}
+      {{ img | image_url: width: 1200 | prepend: 'https:' | json }}{% unless forloop.last %},{% endunless %}
+    {%- endfor -%}
+  ],
+  {%- if product.metafields.pulse.badges != blank %}
+  "additionalProperty": [
+    {%- for b in product.metafields.pulse.badges.value -%}
+      { "@type": "PropertyValue", "name": "Feature", "value": {{ b | json }} }{% unless forloop.last %},{% endunless %}
+    {%- endfor -%}
+  ],
+  {%- endif %}
+  {%- if sd_count > 0 %}
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": {{ sd_avg | json }},
+    "reviewCount": {{ sd_count }},
+    "bestRating": "5",
+    "worstRating": "1"
+  },
+  {%- if sd_rv.reviews.size > 0 %}
+  "review": [
+    {%- for r in sd_rv.reviews limit: 5 -%}
+    {
+      "@type": "Review",
+      "reviewRating": { "@type": "Rating", "ratingValue": {{ r.rating | default: 5 | json }}, "bestRating": 5, "worstRating": 1 },
+      "author": { "@type": "Person", "name": {{ r.reviewer_name | default: 'Pulse customer' | json }} },
+      {%- if r.title != blank %}"name": {{ r.title | json }},{% endif %}
+      {%- if r.pictures_urls.size > 0 %}"image": [{% for pic in r.pictures_urls limit: 4 %}{{ pic.original | default: pic.huge | default: pic | json }}{% unless forloop.last %},{% endunless %}{% endfor %}],{% endif %}
+      "reviewBody": {{ r.body | default: r.body_html | strip_html | strip | json }},
+      "datePublished": {{ r.created_at | date: '%Y-%m-%d' | json }}
+    }{% unless forloop.last %},{% endunless %}
+    {%- endfor -%}
+  ],
+  {%- endif %}
+  {%- endif %}
+  "offers": [
+    {%- for v in product.variants -%}
+    {
+      "@type": "Offer",
+      "url": {{ sd_url | append: '?variant=' | append: v.id | json }},
+      {%- if v.sku != blank %}"sku": {{ v.sku | json }},{% endif %}
+      {%- if product.variants.size > 1 %}"name": {{ product.title | append: ' – ' | append: v.title | json }},{% endif %}
+      "price": {{ v.price | divided_by: 100.0 | json }},
+      "priceCurrency": {{ cart.currency.iso_code | json }},
+      "priceValidUntil": {{ sd_valid | json }},
+      {%- if v.compare_at_price > v.price %}
+      "priceSpecification": [
+        { "@type": "UnitPriceSpecification", "price": {{ v.price | divided_by: 100.0 | json }}, "priceCurrency": {{ cart.currency.iso_code | json }} },
+        { "@type": "UnitPriceSpecification", "priceType": "https://schema.org/ListPrice", "price": {{ v.compare_at_price | divided_by: 100.0 | json }}, "priceCurrency": {{ cart.currency.iso_code | json }} }
+      ],
+      {%- endif %}
+      "availability": "https://schema.org/{% if v.available %}InStock{% else %}OutOfStock{% endif %}",
+      "itemCondition": "https://schema.org/NewCondition",
+      "seller": { "@id": {{ sd_org_id | json }} },
+      "shippingDetails": {
+        "@type": "OfferShippingDetails",
+        "shippingRate": { "@type": "MonetaryAmount", "value": 0, "currency": {{ cart.currency.iso_code | json }} },
+        "shippingDestination": { "@type": "DefinedRegion", "addressCountry": "IN" },
+        "deliveryTime": {
+          "@type": "ShippingDeliveryTime",
+          "handlingTime": { "@type": "QuantitativeValue", "minValue": 0, "maxValue": 1, "unitCode": "DAY" },
+          "transitTime": { "@type": "QuantitativeValue", "minValue": 3, "maxValue": 5, "unitCode": "DAY" }
+        }
+      },
+      "hasMerchantReturnPolicy": {
+        "@type": "MerchantReturnPolicy",
+        "applicableCountry": "IN",
+        "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+        "merchantReturnDays": 7,
+        "returnMethod": "https://schema.org/ReturnByMail",
+        "returnFees": "https://schema.org/FreeReturn"
+      }
+    }{% unless forloop.last %},{% endunless %}
+    {%- endfor -%}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Home", "item": {{ request.origin | append: '/' | json }} },
+    {%- if collection -%}
+    { "@type": "ListItem", "position": 2, "name": {{ collection.title | json }}, "item": {{ request.origin | append: collection.url | json }} },
+    { "@type": "ListItem", "position": 3, "name": {{ product.title | json }}, "item": {{ sd_url | json }} }
+    {%- else -%}
+    { "@type": "ListItem", "position": 2, "name": {{ product.title | json }}, "item": {{ sd_url | json }} }
+    {%- endif -%}
+  ]
+}
+</script>
+{%- endif -%}
+
+{%- if request.page_type == 'collection' and collection -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Home", "item": {{ request.origin | append: '/' | json }} },
+    { "@type": "ListItem", "position": 2, "name": {{ collection.title | json }}, "item": {{ request.origin | append: collection.url | json }} }
+  ]
+}
+</script>
+{%- endif -%}
