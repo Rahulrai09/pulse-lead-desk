@@ -49,6 +49,13 @@ analytics.subscribe("checkout_completed", (e) => {
   send({ k: "paid", c: cust(), v: e.clientId, p: path(e), d: dev(e), m: Object.assign(ck(e), { st: "Paid", oid: o.id }) });
 });
 
+/* Taps on WhatsApp, Call and Email buttons/links (strong buying signals). */
+analytics.subscribe("clicked", (e) => {
+  const el = (e.data && e.data.element) || {}, h = String(el.href || "");
+  const t = /wa\.me|whatsapp/i.test(h) ? "WhatsApp" : /^tel:/i.test(h) ? "Call" : /^mailto:/i.test(h) ? "Email" : "";
+  if (t) send({ k: "click", c: cust(), v: e.clientId, p: path(e), d: dev(e), m: { t, h: h.slice(0, 200) } });
+});
+
 analytics.subscribe("form_submitted", (e) => {
   const el = (e.data && e.data.element) || {};
   const f = (el.elements || []).filter((x) => x && x.type !== "password").slice(0, 30)

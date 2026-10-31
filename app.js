@@ -432,7 +432,7 @@
       const p = it.p, st = starsFor(it.at), name = p ? p.name : it.name || "Guest";
       const ownE = it.owner !== undefined ? it.owner : p?.owner || ""; const own = ownE ? memberName(ownE) : "";
       const kv = (p ? [["Phone", p.phone], ["City", p.city], ["From", p.came]] : []).concat(it.kv || []).filter((r) => r[1]);
-      return `<article class="tile"${p ? ` data-open="${p.key}"` : ""}>
+      return `<article class="tile"${p ? ` data-open="${p.key}"` : it.vis ? ` data-visitor="${esc(it.vis)}" style="cursor:pointer" title="See what they did on the store"` : ""}>
         <div class="t-top"><span class="av">${esc(initials(name))}</span><div class="t-who"><b class="t-name">${esc(name)}</b>${starHtml(st)}</div></div>
         <div class="t-chips">${it.chip || (p ? chip(p) : "")}${rmChip(p)}</div>
         <p class="t-line">${it.line}</p>
@@ -590,7 +590,7 @@
     const contact = !w.p && (m.ph || m.em) ? ` · ${esc(m.ph || m.em)}` : "";
     const head = `<b>${esc(w.name)} <span class="chip ${w.tag.startsWith("Guest") ? "c-signup" : w.tag.startsWith("New") ? "c-checkout" : "c-converted"}">${esc(w.tag)}</span></b>`;
     const sub = `<small>${what}${contact} · ${ago(ev.created_at)} · ${esc(ev.device || "")}</small>`;
-    return w.p ? `<div class="li"><div class="who" data-open="${w.p.key}" style="cursor:pointer">${head}${sub}</div>${actions(w.p, ev.kind === "checkout")}</div>` : `<div class="li"><div class="who">${head}${sub}</div></div>`;
+    return w.p ? `<div class="li"><div class="who" data-open="${w.p.key}" style="cursor:pointer">${head}${sub}</div>${actions(w.p, ev.kind === "checkout")}</div>` : `<div class="li"><div class="who" data-visitor="${esc(ev.visitor || "")}" style="cursor:pointer" title="See what they did on the store">${head}${sub}</div></div>`;
   }
   /* One row per action: an add-to-cart that went straight to checkout (e.g. "Buy it now") is shown once, on the checkout row. */
   function cartFeed() {
@@ -636,7 +636,7 @@
     return rows.map((r) => {
       const p = r.c.startsWith("v:") ? null : byKey("c" + r.c);
       const what = r.last.kind === "view" ? "Looking at <b>" + esc(r.last.meta?.t || "a product") + "</b>" : r.last.kind === "search" ? `Searched “${esc(r.last.meta?.t || "")}”` : r.last.kind === "cart" ? "Added to cart · <b>" + esc(r.last.meta?.t || "") + "</b>" : r.last.kind === "checkout" ? "<b>On the payment page</b>" : r.last.kind === "login" ? "Just logged in" : "Viewing " + esc(pageName(r.last.path, r.last.meta));
-      return { p, name: p ? "" : "Guest " + r.c.slice(-4).toUpperCase(), chip: p ? "" : '<span class="chip c-signup">Guest · not logged in</span>', at: r.last.created_at, line: `<span style="color:var(--good)">● </span>${what}`, kv: [["Pages", String(r.pages.size)], ["Device", r.last.device || ""]] };
+      return { p, vis: p ? "" : r.last.visitor, name: p ? "" : "Guest " + r.c.slice(-4).toUpperCase(), chip: p ? "" : '<span class="chip c-signup">Guest · not logged in</span>', at: r.last.created_at, line: `<span style="color:var(--good)">● </span>${what}`, kv: [["Pages", String(r.pages.size)], ["Device", r.last.device || ""]] };
     });
   }
   /* Everyone who visited in the last 14 days, most recent first: visits, pages and where they came from. */
@@ -652,7 +652,7 @@
     return [...byP.values()].sort((a, b) => t(b.last.created_at) - t(a.last.created_at)).map((r) => {
       const p = r.c.startsWith("v:") ? null : byKey("c" + r.c);
       const src = (S.firstSrc[r.c.startsWith("v:") ? r.c : "c" + r.c] || {}).src || "Direct / unknown";
-      return { p, name: p ? "" : "Guest " + r.c.slice(-4).toUpperCase(), chip: p ? "" : '<span class="chip c-signup">Guest · not logged in</span>', at: r.last.created_at,
+      return { p, vis: p ? "" : r.last.visitor, name: p ? "" : "Guest " + r.c.slice(-4).toUpperCase(), chip: p ? "" : '<span class="chip c-signup">Guest · not logged in</span>', at: r.last.created_at,
         line: `<b>${r.n} visit${r.n === 1 ? "" : "s"}</b> · ${r.pages.size} page${r.pages.size === 1 ? "" : "s"} · last on ${esc(pageName(r.last.path, r.last.meta))}`,
         kv: [["From", src], ["First visit", fmtDT(r.first.created_at)], ["Device", [...r.devices].join(", ")]] };
     });
@@ -664,7 +664,7 @@
       const m = ev.meta || {}, w = cartWho(ev);
       const what = ev.kind === "checkout" ? `<b>${ev.buyNow ? "Buy now → checkout" : "Started checkout"}</b>${m.t ? " · " + esc(m.t) : ""}${m.tot ? " · " + inr(m.tot) : ""}` : `Added <b>${esc(m.t || "a product")}</b>${m.q > 1 ? " ×" + m.q : ""}${m.a ? " · " + inr(m.a * (m.q || 1)) : ""}`;
       const cls = w.tag.startsWith("Guest") ? "c-signup" : w.tag.startsWith("New") ? "c-checkout" : "c-converted";
-      return { p: w.p, name: w.name, chip: `<span class="chip ${cls}">${esc(w.tag)}</span>`, at: ev.created_at, line: what, link: ev.kind === "checkout", kv: w.p ? [] : [["Contact", m.ph || m.em || ""], ["Device", ev.device || ""]] };
+      return { p: w.p, vis: w.p ? "" : ev.visitor, name: w.name, chip: `<span class="chip ${cls}">${esc(w.tag)}</span>`, at: ev.created_at, line: what, link: ev.kind === "checkout", kv: w.p ? [] : [["Contact", m.ph || m.em || ""], ["Device", ev.device || ""]] };
     });
   }
 
@@ -842,7 +842,98 @@
   }
 
   /* ---------- Contact drawer ---------- */
+  /* A guest browser's journey: which wheelchairs they looked at, for how long, and everything they did, visit by visit. */
+  const dur = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? s + " s" : s < 3600 ? Math.floor(s / 60) + " min" + (s % 60 && s < 600 ? " " + (s % 60) + " s" : "") : Math.floor(s / 3600) + " h " + Math.floor((s % 3600) / 60) + " min"; };
+  const GAP = 30 * 60e3;
+  function visitorJourney(v) {
+    let evs = S.raw.events.filter((e) => e.visitor === v && e.kind !== "login").sort((a, b) => t(a.created_at) - t(b.created_at));
+    /* A product page sends a page visit and a product view a moment apart: keep just the product view. */
+    evs = evs.filter((e) => !(e.kind === "visit" && /\/products\//.test(e.path || "") && evs.some((x) => x.kind === "view" && x.path === e.path && Math.abs(t(x.created_at) - t(e.created_at)) < 15e3)));
+    const sessions = [], products = new Map();
+    evs.forEach((e, i) => {
+      const next = evs[i + 1], gap = next ? t(next.created_at) - t(e.created_at) : 0;
+      e._spent = next && gap < GAP ? gap : null;
+      if (!sessions.length || t(e.created_at) - t(sessions[sessions.length - 1].end) > GAP) sessions.push({ start: e.created_at, end: e.created_at, evs: [], src: null });
+      const ss = sessions[sessions.length - 1]; ss.evs.push(e); ss.end = e.created_at; if (e.meta?.src && !ss.src) ss.src = e.meta.src + (e.meta.cmp ? " · " + e.meta.cmp : "");
+      const name = e.kind === "view" ? e.meta?.t : e.kind === "cart" || e.kind === "checkout" ? null : null;
+      if (name) { const r = products.get(name) || { name, n: 0, ms: 0, price: e.meta?.a, cart: false, ck: false, last: e.created_at }; r.n++; r.ms += e._spent || 0; r.last = e.created_at; products.set(name, r); }
+    });
+    for (const e of evs) for (const r of products.values()) {
+      if (e.kind === "cart" && e.meta?.t && r.name.includes(e.meta.t)) r.cart = true;
+      if ((e.kind === "checkout" || e.kind === "ckstep") && e.meta?.t && e.meta.t.includes(r.name)) r.ck = true;
+      if (e.kind === "paid" && e.meta?.t && e.meta.t.includes(r.name)) r.paid = true;
+    }
+    return { evs, sessions, products: [...products.values()].sort((a, b) => b.ms - a.ms || b.n - a.n) };
+  }
+  function journeyTitle(e) {
+    const m = e.meta || {};
+    if (e.kind === "view") return ["Looked at " + (m.t || "a wheelchair") + (m.a ? " · " + inr(m.a) : ""), "e-note"];
+    if (e.kind === "visit") return ["Opened " + pageName(e.path, m), ""];
+    if (e.kind === "search") return [`Searched “${m.t || ""}”`, ""];
+    if (e.kind === "cart") return [`Added to cart · ${m.t || "a product"}${m.a ? " · " + inr(m.a * (m.q || 1)) : ""}`, "e-ab"];
+    if (e.kind === "checkout") return [`${String(e.path || "").startsWith("/checkouts") ? "Opened checkout" : "Started checkout"} · ${m.t || ""}${m.tot ? " · " + inr(m.tot) : ""}`, "e-ab"];
+    if (e.kind === "ckstep") return [`Checkout · ${m.st || "next step"}${m.ph ? " · " + m.ph : m.em ? " · " + m.em : ""}${m.nm ? " · " + m.nm : ""}`, "e-ab"];
+    if (e.kind === "paid") return [`Paid · ${m.t || ""}${m.tot ? " · " + inr(m.tot) : ""}`, "e-order"];
+    if (e.kind === "click") return [m.t === "WhatsApp" ? "Tapped WhatsApp (live demo / chat)" : m.t === "Call" ? "Tapped Call" : "Tapped " + (m.t || "a link"), "e-login"];
+    if (e.kind === "form") return ["Submitted a form · " + (m.t || ""), "e-note"];
+    return [e.kind, ""];
+  }
+  /* Wheelchairs a contact looked at, across every browser they used. */
+  function productsCard(p) {
+    const vis = new Set(S.raw.events.filter((e) => (p.cid && evCust(e) === p.cid) || (p.visitor && e.visitor === p.visitor) || S.v2g[e.visitor] === p.key).map((e) => e.visitor).filter(Boolean));
+    const all = new Map();
+    for (const v of vis) for (const r of visitorJourney(v).products) { const x = all.get(r.name) || { ...r, n: 0, ms: 0 }; x.n += r.n; x.ms += r.ms; x.cart ||= r.cart; x.ck ||= r.ck; x.paid ||= r.paid; if (t(r.last) > t(x.last)) x.last = r.last; all.set(r.name, x); }
+    const list = [...all.values()].sort((a, b) => b.ms - a.ms || b.n - a.n);
+    if (!list.length) return "";
+    const maxMs = Math.max(1, ...list.map((r) => r.ms));
+    return `<div class="dcard"><h4>Wheelchairs they looked at</h4>${list.slice(0, 8).map((r) => `<div class="vj-p"><div class="vj-pt"><b>${esc(r.name)}</b><span>${r.price ? inr(r.price) : ""}</span></div>
+      <div class="vj-bar"><i style="width:${Math.max(4, (r.ms / maxMs) * 100)}%"></i></div>
+      <small>${r.ms ? "about " + dur(r.ms) : "a few seconds"} · opened ${r.n} time${r.n === 1 ? "" : "s"}${r.paid ? ' · <b class="vj-ok">paid</b>' : r.ck ? ' · <b class="vj-hot">went to checkout</b>' : r.cart ? ' · <b class="vj-hot">added to cart</b>' : ""} · last ${ago(r.last)}</small></div>`).join("")}</div>`;
+  }
+  function renderVisitor(v) {
+    const c = S.v2c[v], g = S.v2g[v];
+    if (c && byKey("c" + c)) { S.open = "c" + c; S.dTab = "tl"; return renderDrawer(); }
+    if (g && byKey(g)) { S.open = g; S.dTab = "tl"; return renderDrawer(); }
+    const J = visitorJourney(v), name = "Guest " + String(v).slice(-4).toUpperCase();
+    if (!J.evs.length) { closeDrawer(); return; }
+    const first = J.evs[0], last = J.evs[J.evs.length - 1];
+    const total = J.evs.reduce((s, e) => s + (e._spent || 0), 0);
+    const devices = [...new Set(J.evs.map((e) => e.device).filter(Boolean))].join(", ");
+    const src = (S.firstSrc["v:" + v] || {}).src || "Direct / unknown";
+    const carts = J.evs.filter((e) => e.kind === "cart").length, cks = J.evs.filter((e) => e.kind === "checkout").length;
+    const maxMs = Math.max(1, ...J.products.map((r) => r.ms));
+    const prodHtml = J.products.length ? J.products.map((r) => `<div class="vj-p"><div class="vj-pt"><b>${esc(r.name)}</b><span>${r.price ? inr(r.price) : ""}</span></div>
+        <div class="vj-bar"><i style="width:${Math.max(4, (r.ms / maxMs) * 100)}%"></i></div>
+        <small>${r.ms ? "about " + dur(r.ms) : "under a few seconds"} · opened ${r.n} time${r.n === 1 ? "" : "s"}${r.paid ? ' · <b class="vj-ok">paid</b>' : r.ck ? ' · <b class="vj-hot">went to checkout</b>' : r.cart ? ' · <b class="vj-hot">added to cart</b>' : ""} · last ${ago(r.last)}</small></div>`).join("")
+      : '<p class="muted">Hasn\'t opened a wheelchair page yet.</p>';
+    const dayLbl = (d) => new Date(d).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+    const tl = J.sessions.slice().reverse().map((ss, i) => `<div class="tl-day">Visit ${J.sessions.length - i} · ${dayLbl(ss.start)}, ${new Date(ss.start).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}${ss.src ? " · from " + esc(ss.src) : ""} · ${dur(Math.max(0, t(ss.end) - t(ss.start)) || 0) || "—"}</div>` +
+      ss.evs.slice().reverse().map((e) => { const [title, cls] = journeyTitle(e); return `<div class="ev ${cls}"><b>${esc(title)}</b><small>${new Date(e.created_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit" })}${e._spent != null ? " · stayed " + dur(e._spent) : e === last ? " · last thing they did" : ""}${e.device ? " · " + esc(e.device) : ""}</small></div>`; }).join("")).join("");
+    $("drawerRoot").innerHTML = `<div class="scrim" data-close></div>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(name)}">
+      <div class="dh">
+        <div class="row">
+          <span class="av av-lg">${esc(initials(name))}</span>
+          <div class="dh-who"><h2>${esc(name)}</h2>${starHtml(starsFor(last.created_at))}</div>
+          <div class="acts"><button class="btn small" type="button" data-close>Close</button></div>
+        </div>
+        <div class="dh-chips"><span class="chip c-signup">Guest · not logged in</span>${now() - t(last.created_at) < 5 * 60e3 ? '<span class="chip c-converted">On the store now</span>' : ""}</div>
+        <div class="dstats">
+          <div><span>Time on store</span><b>${total ? dur(total) : "—"}</b><small>${J.sessions.length} visit${J.sessions.length === 1 ? "" : "s"}</small></div>
+          <div><span>Wheelchairs seen</span><b class="num">${J.products.length}</b><small>${J.evs.length} actions</small></div>
+          <div><span>Cart / checkout</span><b class="num">${carts} / ${cks}</b><small>${carts || cks ? "interested" : "just browsing"}</small></div>
+          <div><span>Last seen</span><b>${ago(last.created_at)}</b><small>${esc(devices || "")}</small></div>
+        </div>
+        <p class="muted vj-note">From <b>${esc(src)}</b> · first seen ${fmtDT(first.created_at)}. No name or phone yet: they appear here once they log in or type their phone at checkout.</p>
+      </div>
+      <div class="db">
+        <div class="dcard"><h4>Wheelchairs they looked at</h4>${prodHtml}</div>
+        <div class="dcard"><h4>Everything they did</h4><div class="tl">${tl}</div><p class="muted vj-note">"Stayed" is the time until their next action on the store; the last page of a visit has no end time.</p></div>
+      </div>
+    </aside>`;
+  }
   function renderDrawer() {
+    if (String(S.open || "").startsWith("vis:")) return renderVisitor(S.open.slice(4));
     const p = byKey(S.open);
     if (!p) { closeDrawer(); return; }
     const ev = [];
@@ -850,7 +941,7 @@
     for (const l of p.logins.slice(0, 15)) ev.push({ at: l.created_at, cls: "e-login", title: "Logged in on the store", sub: l.device || "" });
     for (const v of p.visits.slice(0, 40)) ev.push({ at: v.created_at, cls: "", title: "Viewed " + pageName(v.path, v.meta), sub: (!v.customer_id ? "before login · " : "") + (v.device || "") });
     for (const L of p.leads || []) ev.push({ at: L.created_at, cls: "e-note", title: `${L.origin === "form" ? "Filled the " + L.kind.toLowerCase() + " form on the website" : "Lead added by " + memberName(L.created_by || "")} · ${L.source}`, text: L.note || "" });
-    for (const c of (p.carts || []).filter((x) => ["view", "search", "form"].includes(x.kind)).slice(0, 40)) ev.push({ at: c.created_at, cls: "", title: c.kind === "view" ? "Looked at " + (c.meta?.t || "a product") + (c.meta?.a ? " · " + inr(c.meta.a) : "") : c.kind === "search" ? `Searched “${c.meta?.t || ""}”` : "Submitted a form · " + (c.meta?.t || ""), sub: (!c.customer_id ? "before login · " : "") + (c.device || "") });
+    for (const c of (p.carts || []).filter((x) => ["view", "search", "form", "click"].includes(x.kind)).slice(0, 40)) ev.push({ at: c.created_at, cls: "", title: c.kind === "click" ? journeyTitle(c)[0] : c.kind === "view" ? "Looked at " + (c.meta?.t || "a product") + (c.meta?.a ? " · " + inr(c.meta.a) : "") : c.kind === "search" ? `Searched “${c.meta?.t || ""}”` : "Submitted a form · " + (c.meta?.t || ""), sub: (!c.customer_id ? "before login · " : "") + (c.device || "") });
     for (const c of (p.carts || []).filter((x) => x.kind === "ckstep" || x.kind === "paid").slice(0, 30)) ev.push({ at: c.created_at, cls: c.kind === "paid" ? "e-order" : "e-ab", title: c.kind === "paid" ? `Paid at checkout${c.meta?.tot ? " · " + inr(c.meta.tot) : ""}` : `Checkout · ${c.meta?.st || "next step"}${c.meta?.ph ? " · " + c.meta.ph : c.meta?.em ? " · " + c.meta.em : ""}`, sub: (!c.customer_id ? "guest · " : "") + (c.device || "") });
     for (const c of (p.carts || []).filter((x) => x.kind === "cart" || x.kind === "checkout").slice(0, 30)) ev.push({ at: c.created_at, cls: "e-ab", title: c.kind === "cart" ? `Added to cart · ${c.meta?.t || "a product"}${c.meta?.a ? " · " + inr(c.meta.a * (c.meta.q || 1)) : ""}` : `Reached payment page · ${c.meta?.t || ""}${c.meta?.tot ? " · " + inr(c.meta.tot) : ""}`, sub: (!c.customer_id ? "before login · " : "") + (c.device || "") });
     for (const k of p.checkouts) ev.push({ at: k.created_at, cls: k.completed_at ? "e-order" : "e-ab", title: (k.completed_at ? "Checkout completed" : "Checkout not completed") + " · " + inr(k.total), sub: k.items });
@@ -901,6 +992,7 @@
             ${row("City", esc(p.city || "—"))}
             ${row("Came from", esc(p.came || "Direct / unknown") + (p.camp ? " · campaign " + esc(p.camp) : ""))}
           </dl></div>
+          ${productsCard(p)}
           <div class="dcard"><h4>Interest &amp; purchases</h4><dl class="kv">
             ${row("Interested in", esc(p.cart || "—"))}
             ${p.leads?.length ? row("Lead", p.leads.map((L) => `${esc(L.kind)} · ${esc(L.source)} · ${fmtDT(L.created_at)}${L.interest ? " · " + esc(L.interest) : ""}${L.note ? `<span class="kv-note">${esc(L.note)}</span>` : ""}`).join("<br>")) : ""}
@@ -1197,7 +1289,7 @@
 
   /* ---------- Events ---------- */
   document.addEventListener("click", async (e) => {
-    const el = e.target.closest("[data-lead-done],[data-ldone],[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy,[data-rm-edit],[data-rm-cancel]");
+    const el = e.target.closest("[data-lead-done],[data-ldone],[data-cview],[data-cmore],[data-csort],[data-dtab],[data-tl-all],[data-box],#bfClear,[data-more],[data-less],[data-csv],[data-drefresh],[data-copy],[data-open],[data-visitor],[data-close],[data-go],[data-cf],[data-kf],[data-sf],.tab,#refreshBtn,#bannerRetry,[data-reset],[data-remove],[data-restore],[data-modal-close],#newLeadBtn,[data-edit-lead],[data-del-lead],[data-export],[data-export-table],#repMakeNow,#tlCopy,[data-rm-edit],[data-rm-cancel]");
     if (!el) return;
     if (el.matches("[data-copy]")) { e.stopPropagation(); copy(el.dataset.copy, el.dataset.label); return; }
     if (el.matches("[data-modal-close]")) { $("modalRoot").innerHTML = ""; return; }
@@ -1234,6 +1326,7 @@
     if (el.matches("[data-remove]")) { if (el.dataset.confirm !== "1") { el.dataset.confirm = "1"; el.textContent = "Click again to remove"; return; } if (await team("remove", { email: el.dataset.remove })) toast("Removed. They can no longer sign in."); return; }
     if (el.matches("[data-restore]")) { if (await team("restore", { email: el.dataset.restore })) toast("Access restored"); return; }
     if (el.matches("[data-open]")) { if (e.target.closest("a,button:not(.card),input,select")) return; openDrawer(el.dataset.open); }
+    if (el.matches("[data-visitor]")) { if (e.target.closest("a,button,input,select")) return; openDrawer("vis:" + el.dataset.visitor); }
   });
   const markSelf = (e) => { const t = e.target; if (!t.closest || !t.closest("#drawerRoot") || t.closest("[data-drefresh],[data-close],[data-dtab],[data-tl-all]")) return;
     if (e.type === "submit" || (e.type === "change" && t.matches("select")) || (e.type === "click" && t.closest("button"))) S.drawerSelf = Date.now(); };

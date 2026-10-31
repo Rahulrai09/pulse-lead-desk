@@ -388,3 +388,14 @@ button.kpi.on{border-color:var(--navy);background:#F2F6FC;box-shadow:inset 0 -3p
 .pc-own i{display:grid;place-items:center;flex-shrink:0;width:20px;height:20px;border-radius:50%;background:var(--good-bg);color:var(--good);font-style:normal;font-size:9.5px;font-weight:800}
 .pc-own.pc-nobody{color:var(--muted)}.pc-own.pc-nobody i{background:var(--sunk);color:var(--muted)}
 @media (max-width:760px){.board{grid-template-columns:repeat(6,82vw);scroll-snap-type:x mandatory}.pcol{scroll-snap-align:start}.pcol-list{max-height:none}}
+/* Guest journey: wheelchairs looked at */
+.vj-p{padding:8px 0;border-bottom:1px solid var(--line,#e6eaf0)}
+.vj-p:last-child{border-bottom:0}
+.vj-pt{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.vj-pt b{font-size:14px}
+.vj-pt span{color:var(--muted);font-size:13px;white-space:nowrap}
+.vj-bar{height:6px;border-radius:99px;background:var(--sunk);margin:6px 0 4px;overflow:hidden}
+.vj-bar i{display:block;height:100%;border-radius:99px;background:var(--accent,#F2921F)}
+.vj-p small{color:var(--muted);font-size:12px}
+.vj-hot{color:var(--warn)} .vj-ok{color:var(--good)}
+.vj-note{font-size:12.5px;margin:10px 0 0}
