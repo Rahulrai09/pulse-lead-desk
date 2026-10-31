@@ -114,9 +114,10 @@
         fetchAll("sh_checkouts", "id,customer_id,name,email,phone,city,created_at,updated_at,completed_at,total,items,recover_url", "created_at"),
         fetchAll("sh_orders", "id,name,customer_id,customer_name,email,phone,created_at,cancelled_at,financial,fulfillment,total,items", "created_at"),
         Promise.all([
-          sb.from("store_events").select("id,customer_id,visitor,kind,created_at,device,path,meta").neq("kind", "visit").gte("created_at", since).order("created_at", { ascending: false }).limit(5000),
+          sb.from("store_events").select("id,customer_id,visitor,kind,created_at,device,path,meta").not("kind", "in", "(visit,view)").gte("created_at", since).order("created_at", { ascending: false }).limit(5000),
+          sb.from("store_events").select("id,customer_id,visitor,kind,created_at,device,path,meta").eq("kind", "view").gte("created_at", new Date(now() - 30 * DAY).toISOString()).order("created_at", { ascending: false }).limit(5000),
           sb.from("store_events").select("id,customer_id,visitor,kind,created_at,device,path,meta").eq("kind", "visit").gte("created_at", new Date(now() - 14 * DAY).toISOString()).order("created_at", { ascending: false }).limit(5000),
-        ]).then(([a, b]) => [...(a.data || []), ...(b.data || [])].filter((e) => !String(e.visitor || "").startsWith("testvisitor")).sort((x, y) => t(y.created_at) - t(x.created_at))),
+        ]).then(([a, b, c]) => [...(a.data || []), ...(b.data || []), ...(c.data || [])].filter((e) => !String(e.visitor || "").startsWith("testvisitor")).sort((x, y) => t(y.created_at) - t(x.created_at))),
         fetchAll("crm_contacts", "*"),
         fetchAll("crm_notes", "*", "created_at"),
         fetchAll("crm_followups", "*"),
@@ -166,36 +167,69 @@
   /* Checkouts seen live by the store pixel that Shopify hasn't listed yet (Shopify only lists a checkout once it's abandoned). */
   function liveCheckouts() {
     const R = S.raw, out = [];
+    const steps = R.events.filter((e) => e.kind === "ckstep" || e.kind === "paid");
     for (const ev of R.events) {
       if (ev.kind !== "checkout") continue;
-      const c = evCust(ev), m = ev.meta || {}, at = t(ev.created_at);
-      const ph = digits(m.ph).slice(-10), em = (m.em || "").toLowerCase();
+      const c = evCust(ev), m = ev.meta || {}, at = t(ev.created_at), who = evPerson(ev);
+      /* What they typed later in the same checkout (phone, email, name, city) and how far they got. Newest first. */
+      const mine = steps.filter((s) => evPerson(s) === who && t(s.created_at) >= at - 5e3 && t(s.created_at) - at < 6 * 3600e3);
+      const pick = (f) => (mine.find((s) => s.meta && s.meta[f]) || { meta: {} }).meta[f] || m[f] || "";
+      const nm = pick("nm"), phone = pick("ph"), email = pick("em"), city = pick("city");
+      const paidEv = mine.find((s) => s.kind === "paid");
+      const step = paidEv ? "Paid" : (mine.find((s) => s.kind === "ckstep") || { meta: {} }).meta.st || "";
+      const ph = digits(phone).slice(-10), em = (email || "").toLowerCase();
       const same = (k) => (c && k.customer_id === c) || (em && (k.email || "").toLowerCase() === em) || (ph && digits(k.phone).slice(-10) === ph);
       if (R.checkouts.some((k) => same(k) && Math.abs(t(k.created_at) - at) < 3 * 3600e3)) continue;
       if (out.some((k) => k.person === evPerson(ev) && k.items === (m.t || "") && Math.abs(t(k.created_at) - at) < 30 * 60e3)) continue;
       const order = R.orders.find((o) => (same(o) || (c && o.customer_id === c)) && t(o.created_at) >= at - 60e3);
-      out.push({ id: "live-" + ev.id, live: true, person: evPerson(ev), customer_id: c, name: m.nm || "", email: m.em || "", phone: m.ph || "", city: "",
-        created_at: ev.created_at, updated_at: ev.created_at, completed_at: order ? order.created_at : null, total: m.tot || 0, items: m.t || "", recover_url: "" });
+      out.push({ id: "live-" + ev.id, live: true, person: who, visitor: ev.visitor, customer_id: c, name: nm, email, phone, city, step,
+        created_at: ev.created_at, updated_at: (mine[0] || ev).created_at, completed_at: order ? order.created_at : paidEv ? paidEv.created_at : null, total: m.tot || 0, items: m.t || "", recover_url: "" });
     }
     return out;
   }
   function build() {
     const R = S.raw, byKey = new Map();
-    S.v2c = {}; S.firstSrc = {};
+    S.v2c = {}; S.v2g = {}; S.firstSrc = {};
     for (const ev of R.events.slice().reverse()) if (ev.customer_id && ev.visitor) S.v2c[ev.visitor] = ev.customer_id;
     S.ck = [...liveCheckouts(), ...R.checkouts].sort((a, b) => t(b.created_at) - t(a.created_at));
     const get = (key, seed) => { if (!byKey.has(key)) byKey.set(key, Object.assign({ key, checkouts: [], orders: [], logins: [], visits: [], tags: [] }, seed)); return byKey.get(key); };
     for (const c of R.customers) get("c" + c.id, { cid: c.id, source: "customer", name: c.name || "Unnamed customer", email: c.email || "", phone: c.phone || "", city: c.city || "", createdAt: c.created_at, updatedAt: c.updated_at, spent: Number(c.amount_spent || 0), orderCount: c.orders_count || 0, tags: c.tags || [] });
-    for (const k of S.ck) {
-      const p = get(k.customer_id ? "c" + k.customer_id : "g" + k.id, { source: "guest", name: k.name || "Guest checkout", email: k.email || "", phone: "", city: "", createdAt: k.created_at, updatedAt: k.updated_at, spent: 0, orderCount: 0 });
+    const last10 = (x) => digits(x).slice(-10);
+    /* An existing contact with the same phone (last 10 digits) or email, e.g. a guest who already has an account. */
+    const findBy = (phone, email) => {
+      const ph = last10(phone), em = (email || "").toLowerCase();
+      if (!ph && !em) return null;
+      for (const x of byKey.values()) if ((ph && last10(x.phone) === ph) || (em && (x.email || "").toLowerCase() === em)) return x;
+      return null;
+    };
+    const guestName = (v) => "Guest " + String(v || "").slice(-4).toUpperCase();
+    const guestSeed = (at, v) => ({ source: "guest", name: v ? guestName(v) : "Guest checkout", email: "", phone: "", city: "", createdAt: at, updatedAt: at, spent: 0, orderCount: 0, visitor: v || "" });
+    for (const k of S.ck.slice().reverse()) {
+      let p;
+      if (k.customer_id) p = get("c" + k.customer_id, guestSeed(k.created_at));
+      else {
+        /* Guests (no login): one contact per browser, joined to an account or earlier checkout with the same phone or email. */
+        p = (k.visitor && byKey.get("v:" + k.visitor)) || findBy(k.phone, k.email) || get(k.visitor ? "v:" + k.visitor : "g" + k.id, guestSeed(k.created_at, k.visitor));
+        if (k.visitor) S.v2g[k.visitor] = p.key;
+      }
+      if (k.name && (!p.name || /^Guest/.test(p.name))) p.name = k.name;
       if (!p.phone) p.phone = k.phone || ""; if (!p.city) p.city = k.city || ""; if (!p.email) p.email = k.email || "";
+      k.pkey = p.key;
       p.checkouts.push(k);
     }
     for (const o of R.orders) {
-      const p = get(o.customer_id ? "c" + o.customer_id : "o" + o.id, { source: "guest", name: o.customer_name || o.email || "Guest order", email: o.email || "", phone: o.phone || "", city: "", createdAt: o.created_at, updatedAt: o.created_at, spent: 0, orderCount: 0 });
+      const p = o.customer_id ? get("c" + o.customer_id, guestSeed(o.created_at)) : findBy(o.phone, o.email) || get("o" + o.id, { source: "guest", name: o.customer_name || o.email || "Guest order", email: o.email || "", phone: o.phone || "", city: "", createdAt: o.created_at, updatedAt: o.created_at, spent: 0, orderCount: 0 });
+      if (o.customer_name && /^Guest/.test(p.name)) p.name = o.customer_name;
+      o.pkey = p.key;
       p.orders.push(o);
     }
-    const last10 = (x) => digits(x).slice(-10);
+    /* Guests who added to cart without logging in or checking out: one contact per browser. */
+    for (const ev of R.events) {
+      if (ev.kind !== "cart" || evCust(ev) || !ev.visitor || S.v2g[ev.visitor]) continue;
+      const p = get("v:" + ev.visitor, guestSeed(ev.created_at, ev.visitor));
+      if (t(ev.created_at) < t(p.createdAt)) p.createdAt = ev.created_at;
+      S.v2g[ev.visitor] = p.key;
+    }
     for (const L of R.leads) {
       const ph = last10(L.phone), em = (L.email || "").toLowerCase();
       let p = [...byKey.values()].find((x) => (ph && last10(x.phone) === ph) || (em && (x.email || "").toLowerCase() === em));
@@ -203,18 +237,27 @@
       (p.leads ||= []).push(L);
       if (!p.phone && L.phone) p.phone = L.phone; if (!p.city && L.city) p.city = L.city;
     }
+    /* A guest's browser whose checkout phone/email now belongs to another contact (Shopify created the customer):
+       join that browser's activity, notes and remarks to that contact. */
+    S.alias = {};
     for (const ev of R.events) {
-      const c = evCust(ev), p = c ? byKey.get("c" + c) : null;
+      if (ev.kind !== "ckstep" || evCust(ev) || !ev.visitor || byKey.has("v:" + ev.visitor)) continue;
+      const m = ev.meta || {}, p = findBy(m.ph, m.em);
+      if (p) { S.v2g[ev.visitor] = p.key; S.alias["v:" + ev.visitor] = p.key; }
+    }
+    const K = (k) => S.alias[k] || k;
+    for (const ev of R.events) {
+      const c = evCust(ev), p = c ? byKey.get("c" + c) : S.v2g[ev.visitor] ? byKey.get(S.v2g[ev.visitor]) : null;
       if (ev.meta?.src) { const who = c ? "c" + c : "v:" + ev.visitor; if (!S.firstSrc[who] || t(ev.created_at) < t(S.firstSrc[who].at)) S.firstSrc[who] = { src: ev.meta.src, cmp: ev.meta.cmp, at: ev.created_at }; }
       if (!p) continue;
       if (ev.kind === "login") p.logins.push(ev); else if (ev.kind === "visit") p.visits.push(ev); else (p.carts ||= []).push(ev);
     }
-    const crm = Object.fromEntries(R.contacts.map((c) => [c.key, c]));
+    const crm = Object.fromEntries(R.contacts.map((c) => [K(c.key), c]));
     const notes = {}, fus = {};
-    for (const n of R.notes) (notes[n.key] ||= []).push(n);
-    for (const f of R.followups) (fus[f.key] ||= []).push(f);
+    for (const n of R.notes) (notes[K(n.key)] ||= []).push(n);
+    for (const f of R.followups) (fus[K(f.key)] ||= []).push(f);
     const rms = {};
-    for (const r of R.remarks || []) (rms[r.key] ||= []).push(r);
+    for (const r of R.remarks || []) (rms[K(r.key)] ||= []).push(r);
     const list = [...byKey.values()];
     for (const p of list) {
       p.checkouts.sort((a, b) => t(b.created_at) - t(a.created_at));
@@ -231,11 +274,13 @@
       const unshipped = paid.filter((o) => o.fulfillment !== "FULFILLED");
       const openCheckout = p.checkouts.find((k) => !k.completed_at && now() - t(k.created_at) < DAY);
       const lastAbandoned = p.checkouts.find((k) => !k.completed_at);
-      p.value = paid.reduce((s, o) => s + Number(o.total), 0) || Number(lastAbandoned?.total || 0);
+      const lastCart = (p.carts || []).find((e) => e.kind === "cart");
+      p.value = paid.reduce((s, o) => s + Number(o.total), 0) || Number(lastAbandoned?.total || 0) || (lastCart ? Number(lastCart.meta?.a || 0) * (lastCart.meta?.q || 1) : 0);
       if (pendingPay.length) { p.status = "pending"; p.statusText = "Payment pending"; }
       else if (paid.length || p.orderCount > 0) { p.status = "converted"; p.statusText = unshipped.length ? "Converted · to ship" : "Converted"; }
-      else if (openCheckout) { p.status = "checkout"; p.statusText = "In checkout"; }
+      else if (openCheckout) { p.status = "checkout"; p.statusText = "In checkout" + (openCheckout.step && openCheckout.step !== "Paid" ? " · " + openCheckout.step.toLowerCase() : ""); }
       else if (lastAbandoned) { p.status = "notconverted"; p.statusText = "Not converted"; }
+      else if (p.source === "guest" && lastCart) { p.status = "cart"; p.statusText = "Added to cart"; }
       else if (p.source === "lead") { const L = p.leads[0]; p.status = "lead"; p.statusText = (L.kind && L.kind !== "Purchase" ? L.kind : "New") + " lead"; }
       else { p.status = "signup"; p.statusText = "Signed up"; }
       p.came = p.leads?.length ? p.leads[p.leads.length - 1].source : (S.firstSrc[p.key] || {}).src || "";
@@ -255,7 +300,7 @@
     list.sort((a, b) => Math.max(t(b.lastActive), t(b.lastCheckout)) - Math.max(t(a.lastActive), t(a.lastCheckout)));
     return list;
   }
-  const byKey = (k) => S.contacts.find((c) => c.key === k);
+  const byKey = (k) => { k = (S.alias && S.alias[k]) || k; return S.contacts.find((c) => c.key === k); };
   const allFollowups = () => S.raw.followups.slice().sort((a, b) => t(a.due_at) - t(b.due_at));
 
   /* ---------- Render helpers ---------- */
@@ -432,7 +477,7 @@
     const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => S.period.p === "all" ? now() - t(x.created_at) < 14 * DAY : inRange(x.created_at));
     const lastOrder = (p) => p.orders.find((o) => !o.cancelled_at)?.created_at;
     const byAt = (arr) => arr.sort((a, b) => t(b.at) - t(a.at));
-    const ckP = new Map(); for (const k of ck) { if (!win(k.created_at, 2 * DAY)) continue; const p = byKey(k.customer_id ? "c" + k.customer_id : "g" + k.id); if (p && !ckP.has(p.key)) ckP.set(p.key, { p, at: k.created_at, link: !k.completed_at, line: `<b>${esc(k.items || "Checkout")}</b> · ${inr(k.total)} · ${k.completed_at ? "Completed" : "Not paid yet"}` }); }
+    const ckP = new Map(); for (const k of ck) { if (!win(k.created_at, 2 * DAY)) continue; const p = byKey(k.pkey || (k.customer_id ? "c" + k.customer_id : "g" + k.id)); if (p && !ckP.has(p.key)) ckP.set(p.key, { p, at: k.created_at, link: !k.completed_at, line: `<b>${esc(k.items || "Checkout")}</b> · ${inr(k.total)} · ${k.completed_at ? "Completed" : "Not paid yet"}` }); }
     const hot = C.filter((p) => (p.status === "notconverted" || p.status === "checkout") && win(p.lastCheckout, 14 * DAY));
     const fu = allFollowups().filter((f) => !f.done && (all ? t(f.due_at) < endOfToday() : inRange(f.due_at)));
     const notConv = C.filter((p) => p.status === "notconverted" && win(p.lastCheckout));
@@ -530,6 +575,8 @@
 
   function cartWho(ev) {
     const c = evCust(ev), p = c ? byKey("c" + c) : null;
+    const g = !c && S.v2g[ev.visitor] ? byKey(S.v2g[ev.visitor]) : null;
+    if (g) return { p: g, name: g.name, tag: "Guest · not logged in" };
     if (p) return { p, name: p.name, tag: (p.fresh ? "New customer" : "Returning customer") + (!ev.customer_id ? " · before login" : "") };
     const m = ev.meta || {};
     const id = ev.customer_id ? "Customer " + ev.customer_id.slice(-4) : "Guest " + String(ev.visitor || "").slice(-4).toUpperCase();
@@ -621,7 +668,7 @@
     });
   }
 
-  const C_FILTERS = [["all", "All"], ["leads", "Leads"], ["fresh", "Fresh sign-ups"], ["loggedin", "Logged in (7 d)"], ["checkout", "In checkout"], ["notconverted", "Not converted"], ["pending", "Pending"], ["converted", "Converted"], ["signup", "Signed up only"], ["mine", "Mine"], ["followup", "Has follow-up"]];
+  const C_FILTERS = [["all", "All"], ["leads", "Leads"], ["fresh", "Fresh sign-ups"], ["loggedin", "Logged in (7 d)"], ["cart", "Added to cart"], ["checkout", "In checkout"], ["notconverted", "Not converted"], ["pending", "Pending"], ["converted", "Converted"], ["signup", "Signed up only"], ["mine", "Mine"], ["followup", "Has follow-up"]];
   function filterContacts(f, q) {
     q = q.trim().toLowerCase();
     return S.contacts.filter((p) => {
@@ -631,7 +678,7 @@
       if (f === "loggedin" && !(p.lastLogin && now() - t(p.lastLogin) < 7 * DAY)) return false;
       if (f === "followup" && !p.nextFU) return false;
       if (f === "mine" && p.owner !== S.me.email.toLowerCase()) return false;
-      if (["checkout", "notconverted", "pending", "converted", "signup"].includes(f) && p.status !== f) return false;
+      if (["cart", "checkout", "notconverted", "pending", "converted", "signup"].includes(f) && p.status !== f) return false;
       if (q && ![p.name, p.email, p.phone, p.city, p.cart, p.came].join(" ").toLowerCase().includes(q)) return false;
       return true;
     });
@@ -719,8 +766,8 @@
     $("kFilters").innerHTML = K_FILTERS.map(([v, l]) => `<button class="fchip" type="button" data-kf="${v}" aria-pressed="${S.kFilter === v}">${l}</button>`).join("");
     const rows = S.ck.filter((k) => inRange(k.created_at)).filter((k) => S.kFilter === "all" || (S.kFilter === "fresh" && now() - t(k.created_at) < 2 * DAY) || (S.kFilter === "open" && !k.completed_at) || (S.kFilter === "done" && k.completed_at));
     $("kBody").innerHTML = rows.length ? rows.slice(0, 500).map((k) => {
-      const key = k.customer_id ? "c" + k.customer_id : "g" + k.id, p = byKey(key);
-      const res = k.completed_at ? '<span class="chip c-converted">Completed</span>' : k.live ? '<span class="chip c-checkout">On checkout page · live</span>' : (now() - t(k.created_at) < DAY ? '<span class="chip c-checkout">In progress</span>' : '<span class="chip c-notconverted">Abandoned</span>');
+      const key = k.pkey || (k.customer_id ? "c" + k.customer_id : "g" + k.id), p = byKey(key);
+      const res = k.completed_at ? '<span class="chip c-converted">Completed</span>' : k.live ? `<span class="chip c-checkout">${k.step ? esc(k.step) : "On checkout page"} · live</span>` : (now() - t(k.created_at) < DAY ? '<span class="chip c-checkout">In progress</span>' : '<span class="chip c-notconverted">Abandoned</span>');
       return `<tr data-open="${key}"><td class="d">${fmtDT(k.created_at)}<span class="sub">${ago(k.created_at)}</span></td>
         <td><b>${esc(p?.name || k.name || "Guest")}</b><span class="sub">${esc(p?.phone || k.phone || p?.email || "")}</span></td>
         <td>${esc(k.items)}</td><td class="d num">${inr(k.total)}</td><td>${res}</td>
@@ -730,7 +777,7 @@
   function renderOrders() {
     const od = S.raw.orders.filter((o) => inRange(o.created_at));
     $("oBody").innerHTML = od.length ? od.slice(0, 500).map((o) => {
-      const key = o.customer_id ? "c" + o.customer_id : "o" + o.id;
+      const key = o.pkey || (o.customer_id ? "c" + o.customer_id : "o" + o.id);
       const [pc, pl] = PAY[o.financial] || ["c-signup", o.financial || "—"];
       const del = o.cancelled_at ? '<span class="chip c-notconverted">Cancelled</span>' : (o.fulfillment === "FULFILLED" ? '<span class="chip c-converted">Shipped</span>' : '<span class="chip c-pending">To ship</span>');
       return `<tr data-open="${key}"><td><b>${esc(o.name)}</b></td><td class="d">${fmtDT(o.created_at)}</td><td>${esc(o.customer_name || o.email || "Guest")}</td>
@@ -804,6 +851,7 @@
     for (const v of p.visits.slice(0, 40)) ev.push({ at: v.created_at, cls: "", title: "Viewed " + pageName(v.path, v.meta), sub: (!v.customer_id ? "before login · " : "") + (v.device || "") });
     for (const L of p.leads || []) ev.push({ at: L.created_at, cls: "e-note", title: `${L.origin === "form" ? "Filled the " + L.kind.toLowerCase() + " form on the website" : "Lead added by " + memberName(L.created_by || "")} · ${L.source}`, text: L.note || "" });
     for (const c of (p.carts || []).filter((x) => ["view", "search", "form"].includes(x.kind)).slice(0, 40)) ev.push({ at: c.created_at, cls: "", title: c.kind === "view" ? "Looked at " + (c.meta?.t || "a product") + (c.meta?.a ? " · " + inr(c.meta.a) : "") : c.kind === "search" ? `Searched “${c.meta?.t || ""}”` : "Submitted a form · " + (c.meta?.t || ""), sub: (!c.customer_id ? "before login · " : "") + (c.device || "") });
+    for (const c of (p.carts || []).filter((x) => x.kind === "ckstep" || x.kind === "paid").slice(0, 30)) ev.push({ at: c.created_at, cls: c.kind === "paid" ? "e-order" : "e-ab", title: c.kind === "paid" ? `Paid at checkout${c.meta?.tot ? " · " + inr(c.meta.tot) : ""}` : `Checkout · ${c.meta?.st || "next step"}${c.meta?.ph ? " · " + c.meta.ph : c.meta?.em ? " · " + c.meta.em : ""}`, sub: (!c.customer_id ? "guest · " : "") + (c.device || "") });
     for (const c of (p.carts || []).filter((x) => x.kind === "cart" || x.kind === "checkout").slice(0, 30)) ev.push({ at: c.created_at, cls: "e-ab", title: c.kind === "cart" ? `Added to cart · ${c.meta?.t || "a product"}${c.meta?.a ? " · " + inr(c.meta.a * (c.meta.q || 1)) : ""}` : `Reached payment page · ${c.meta?.t || ""}${c.meta?.tot ? " · " + inr(c.meta.tot) : ""}`, sub: (!c.customer_id ? "before login · " : "") + (c.device || "") });
     for (const k of p.checkouts) ev.push({ at: k.created_at, cls: k.completed_at ? "e-order" : "e-ab", title: (k.completed_at ? "Checkout completed" : "Checkout not completed") + " · " + inr(k.total), sub: k.items });
     for (const o of p.orders) ev.push({ at: o.created_at, cls: "e-order", title: `Order ${o.name} · ${inr(o.total)}`, sub: `${(PAY[o.financial] || [0, o.financial])[1]}${o.cancelled_at ? " · Cancelled" : ""}` });
@@ -1013,7 +1061,7 @@
   const xdt = (d) => (d ? new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
   function exportView(v) {
     if (v === "contacts") return downloadXlsx("Contacts", contactRows().map((p) => ({ Name: p.name, Phone: p.phone, Email: p.email, City: p.city, Status: p.statusText, Stage: STAGE_NAME[p.stage], "Came from": p.came || "Direct / unknown", Campaign: p.camp, "Signed up": p.source === "customer" ? xdt(p.createdAt) : p.source === "lead" ? "Lead" : "Guest", "Last login": xdt(p.lastLogin), "Last checkout": xdt(p.lastCheckout), "Interested in": p.cart, "Value (₹)": Math.round(p.value || 0), Owner: p.owner ? memberName(p.owner) : "", "Next follow-up": p.nextFU ? `${p.nextFU.kind} ${xdt(p.nextFU.due_at)}` : "", "Checkout link": p.recover })));
-    if (v === "checkouts") return downloadXlsx("Checkouts", S.ck.filter((k) => inRange(k.created_at)).map((k) => { const p = byKey(k.customer_id ? "c" + k.customer_id : "g" + k.id); return { Started: xdt(k.created_at), Customer: p?.name || k.name || "Guest", Phone: p?.phone || k.phone || "", Email: p?.email || k.email || "", Wheelchair: k.items, "Value (₹)": Math.round(Number(k.total) || 0), Result: k.completed_at ? "Completed" : k.live ? "On payment page" : "Abandoned", "Checkout link": k.recover_url || "" }; }));
+    if (v === "checkouts") return downloadXlsx("Checkouts", S.ck.filter((k) => inRange(k.created_at)).map((k) => { const p = byKey(k.pkey || (k.customer_id ? "c" + k.customer_id : "g" + k.id)); return { Started: xdt(k.created_at), Customer: p?.name || k.name || "Guest", Phone: p?.phone || k.phone || "", Email: p?.email || k.email || "", Wheelchair: k.items, "Value (₹)": Math.round(Number(k.total) || 0), Result: k.completed_at ? "Completed" : k.live ? (k.step || "On checkout page") : "Abandoned", "Checkout link": k.recover_url || "" }; }));
     if (v === "orders") return downloadXlsx("Orders", S.raw.orders.filter((o) => inRange(o.created_at)).map((o) => ({ Order: o.name, Date: xdt(o.created_at), Customer: o.customer_name || "", Phone: o.phone || "", Email: o.email || "", Items: o.items, "Value (₹)": Math.round(Number(o.total) || 0), Payment: (PAY[o.financial] || [0, o.financial])[1], Delivery: o.cancelled_at ? "Cancelled" : o.fulfillment === "FULFILLED" ? "Shipped" : "To ship" })));
     if (v === "schedule") return downloadXlsx("Follow-ups", allFollowups().filter((f) => inRange(f.due_at)).map((f) => { const p = byKey(f.key); return { Due: xdt(f.due_at), Type: f.kind, Contact: p?.name || "", Phone: p?.phone || "", Note: f.note || "", "Assigned to": f.assignee_email ? memberName(f.assignee_email) : "", Done: f.done ? "Yes" : "No" }; }));
   }
@@ -1308,6 +1356,14 @@
         if ((p.new?.kind === "cart" && !String(p.new.path || "").startsWith("/checkouts")) || p.new?.kind === "checkout") {
           const w = cartWho(p.new), m = p.new.meta || {};
           notify(p.new.kind === "cart" ? "Added to cart" : "Checkout started", `${w.name} (${w.tag}) ${p.new.kind === "cart" ? "added " + (m.t || "a product") + (m.a ? " · ₹" + Number(m.a * (m.q || 1)).toLocaleString("en-IN") : "") : "started checkout" + (m.tot ? " · ₹" + Number(m.tot).toLocaleString("en-IN") : "")}`);
+        }
+        if (p.new?.kind === "ckstep" && p.new.meta?.st === "Entered contact" && !p.new.customer_id && (p.new.meta.ph || p.new.meta.em)) {
+          const m = p.new.meta;
+          notify("Guest checkout · contact entered", `${m.nm || "A guest"} · ${m.ph || m.em}${m.t ? " · " + m.t : ""}${m.tot ? " · ₹" + Number(m.tot).toLocaleString("en-IN") : ""}. Call them if they don't pay.`);
+        }
+        if (p.new?.kind === "paid") {
+          const m = p.new.meta || {}, w = cartWho(p.new);
+          notify("Order paid", `${m.nm || w.name}${m.ph ? " · " + m.ph : ""}${m.tot ? " · ₹" + Number(m.tot).toLocaleString("en-IN") : ""}`);
         }
         if (p.new?.kind === "login") {
           const c = S.raw.customers.find((x) => x.id === p.new.customer_id);

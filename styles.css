@@ -92,6 +92,7 @@ button.kpi:hover{border-color:var(--navy)}
 .c-pending{background:var(--warn-bg);color:var(--warn)}
 .c-checkout{background:var(--info-bg);color:var(--info)}
 .c-signup{background:var(--sunk);color:var(--muted)}
+.c-cart{background:var(--warn-bg);color:var(--warn)}
 .c-new::after{content:"NEW";margin-left:2px;font-size:9.5px;letter-spacing:.06em}
 
 /* Filters + table */
