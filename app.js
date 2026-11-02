@@ -462,7 +462,8 @@
   function li(p, sub, link = false) { return `<div class="li"><div class="who" data-open="${p.key}" style="cursor:pointer"><b>${esc(p.name)} ${chip(p)}</b><small>${sub}</small></div>${actions(p, link)}</div>`; }
   /* Each box keeps its usual window (e.g. last 7 days) for "All time", and follows the chosen date range otherwise. */
   const isAll = () => S.period.p === "all";
-  const win = (d, ms) => !!d && (isAll() ? (ms ? now() - t(d) < ms : true) : inRange(d));
+  /* "All time" really means all time: no hidden 48 h / 7 day / 14 day windows. */
+  const win = (d) => !!d && (isAll() || inRange(d));
   async function loadVisitRange(force) {
     if (isAll()) { S.vr = null; return; }
     const key = JSON.stringify(S.period); if (!force && S.vr && S.vr.key === key) return;
@@ -474,7 +475,7 @@
   function boxData() {
     const C = S.contacts, ck = S.ck, all = isAll(), lbl = all ? "" : periodLabel();
     const paidIn = (p) => p.orders.some((o) => !o.cancelled_at && ["PAID", "PARTIALLY_REFUNDED"].includes(o.financial) && win(o.created_at));
-    const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => S.period.p === "all" ? now() - t(x.created_at) < 14 * DAY : inRange(x.created_at));
+    const L = S.raw.leads.slice().sort((a, b) => t(b.created_at) - t(a.created_at)).filter((x) => inRange(x.created_at));
     const lastOrder = (p) => p.orders.find((o) => !o.cancelled_at)?.created_at;
     const byAt = (arr) => arr.sort((a, b) => t(b.at) - t(a.at));
     const ckP = new Map(); for (const k of ck) { if (!win(k.created_at, 2 * DAY)) continue; const p = byKey(k.pkey || (k.customer_id ? "c" + k.customer_id : "g" + k.id)); if (p && !ckP.has(p.key)) ckP.set(p.key, { p, at: k.created_at, link: !k.completed_at, line: `<b>${esc(k.items || "Checkout")}</b> · ${inr(k.total)} · ${k.completed_at ? "Completed" : "Not paid yet"}` }); }
@@ -486,9 +487,9 @@
     const inPeriod = (p) => all || [p.createdAt, p.lastActive, p.lastCheckout, p.lastLogin, p.orders[0]?.created_at, ...(p.leads || []).map((x) => x.created_at)].some((d) => d && inRange(d));
     const tot = C.filter(inPeriod);
     return [
-      { id: "fresh", label: all ? "Fresh sign-ups" : "New sign-ups", sub: all ? "new accounts, last 7 days" : "new accounts · " + lbl, empty: all ? "No new sign-ups this week." : "No new sign-ups in this period.", items: byAt(C.filter((p) => p.source === "customer" && win(p.createdAt, 7 * DAY)).map((p) => ({ p, at: p.createdAt, line: `Joined ${fmtDT(p.createdAt)}` }))) },
-      { id: "loggedin", label: all ? "Logged in this week" : "Logged in", sub: all ? "customers seen logging in" : "customers who logged in · " + lbl, empty: all ? "No logins this week." : "No logins in this period.", items: byAt(C.filter((p) => p.logins.some((l) => win(l.created_at, 7 * DAY))).map((p) => ({ p, at: (p.logins.find((l) => win(l.created_at, 7 * DAY)) || {}).created_at || p.lastLogin, line: `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days` }))) },
-      { id: "freshck", label: all ? "Fresh checkouts" : "Checkouts", sub: all ? "started in the last 48 h" : "started · " + lbl, empty: all ? "No checkouts in the last 48 hours." : "No checkouts in this period.", items: byAt([...ckP.values()]) },
+      { id: "fresh", label: all ? "Sign-ups" : "New sign-ups", sub: all ? "all store accounts, newest first" : "new accounts · " + lbl, empty: all ? "No sign-ups yet." : "No new sign-ups in this period.", items: byAt(C.filter((p) => p.source === "customer" && win(p.createdAt, 7 * DAY)).map((p) => ({ p, at: p.createdAt, line: `Joined ${fmtDT(p.createdAt)}` }))) },
+      { id: "loggedin", label: "Logged in", sub: all ? "customers seen logging in · all time" : "customers who logged in · " + lbl, empty: all ? "No logins yet." : "No logins in this period.", items: byAt(C.filter((p) => p.logins.some((l) => win(l.created_at, 7 * DAY))).map((p) => ({ p, at: (p.logins.find((l) => win(l.created_at, 7 * DAY)) || {}).created_at || p.lastLogin, line: `Logged in ${ago(p.lastLogin)} · ${p.logins.length} login${p.logins.length === 1 ? "" : "s"} in 120 days` }))) },
+      { id: "freshck", label: "Checkouts", sub: all ? "people who started checkout · all time" : "started · " + lbl, empty: all ? "No checkouts yet." : "No checkouts in this period.", items: byAt([...ckP.values()]) },
       { id: "converted", label: "Converted", sub: all ? "people who paid" : "paid · " + lbl, cls: "k-good", empty: all ? "No paid orders yet." : "No paid orders in this period.", items: byAt(conv.map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${p.orders.length} order${p.orders.length === 1 ? "" : "s"}</b> · ${inr(p.value)} paid` }))) },
       { id: "notconverted", label: "Not converted", sub: `${inr(notConv.reduce((s, p) => s + p.value, 0))} left in checkout${all ? "" : " · " + lbl}`, cls: "k-bad", empty: all ? "Nobody has left a checkout unpaid." : "No unpaid checkouts in this period.", items: byAt(notConv.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
       { id: "pending", label: "Pending", sub: all ? "payment pending or to ship" : "pending or to ship · " + lbl, cls: "k-warn", empty: "Nothing pending.", items: byAt(pend.map((p) => ({ p, at: lastOrder(p) || p.lastActive, line: `<b>${esc(p.statusText)}</b> · ${inr(p.value)}` }))) },
@@ -520,8 +521,8 @@
           panelTitle: "Visitors", panelSub: "people who visited in the last 14 days, latest first · count = visits per person",
           empty: "No visits recorded yet.", items: visitItems() };
       })(),
-      { id: "carts", label: "Live add to cart", sub: S.period.p === "all" ? "last 48 h" : periodLabel(), empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
-      { id: "hot", label: "Hot leads", sub: all ? "unpaid checkouts, 14 days" : "unpaid checkouts · " + lbl, cls: "k-bad", empty: "No unconverted checkouts in the last 14 days.", items: byAt(hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
+      { id: "carts", label: "Add to cart", sub: all ? "add to cart & checkout activity · all time" : "add to cart & checkout · " + lbl, empty: "Add-to-cart activity appears here the moment someone adds a wheelchair.", items: cartItems() },
+      { id: "hot", label: "Hot leads", sub: all ? "unpaid checkouts · all time" : "unpaid checkouts · " + lbl, cls: "k-bad", empty: all ? "No unpaid checkouts." : "No unpaid checkouts in this period.", items: byAt(hot.map((p) => ({ p, at: p.lastCheckout, link: true, line: `<b>${esc(p.cart || "Checkout")}</b> · ${inr(p.value)}` }))) },
     ];
   }
   // Box filters: owner, date range (with time), weekday, month.
@@ -594,7 +595,7 @@
   }
   /* One row per action: an add-to-cart that went straight to checkout (e.g. "Buy it now") is shown once, on the checkout row. */
   function cartFeed() {
-    const all = S.raw.events.filter((e) => (e.kind === "cart" || e.kind === "checkout") && (S.period.p === "all" ? now() - t(e.created_at) < 2 * DAY : inRange(e.created_at)));
+    const all = S.raw.events.filter((e) => (e.kind === "cart" || e.kind === "checkout") && inRange(e.created_at));
     const hide = new Set();
     for (const ck of all) {
       if (ck.kind !== "checkout") continue;
