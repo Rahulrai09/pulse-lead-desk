@@ -399,3 +399,7 @@ button.kpi.on{border-color:var(--navy);background:#F2F6FC;box-shadow:inset 0 -3p
 .vj-p small{color:var(--muted);font-size:12px}
 .vj-hot{color:var(--warn)} .vj-ok{color:var(--good)}
 .vj-note{font-size:12.5px;margin:10px 0 0}
+/* Active box filters: highlighted so nobody misses why the list is empty */
+.bx-filters.bf-on{box-shadow:inset 0 0 0 2px var(--warn,#c47a00);background:var(--warn-bg,#fff6e5)}
+.bx-filters label.bf-set select,.bx-filters label.bf-set input{border-color:var(--warn,#c47a00);box-shadow:0 0 0 2px rgba(196,122,0,.18);font-weight:700}
+.bx-filters.bf-on #bfClear{background:var(--warn,#c47a00);color:#fff;border-color:transparent}

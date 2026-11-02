@@ -526,7 +526,8 @@
     ];
   }
   // Box filters: owner, date range (with time), weekday, month.
-  S.bf = (() => { try { return JSON.parse(localStorage.getItem("pulse-bf") || "{}"); } catch { return {}; } })();
+  /* Box filters last only until the page is reloaded: a forgotten "Wednesday" filter used to hide everything for days. */
+  S.bf = {}; try { localStorage.removeItem("pulse-bf"); } catch {}
   try { S.box = localStorage.getItem("pulse-box") || "fresh"; } catch { S.box = "fresh"; }
   function boxFilter(items) {
     const f = S.bf, from = f.from ? t(f.from) : 0, to = f.to ? t(f.to) : 0;
@@ -550,6 +551,9 @@
     o.value = S.bf.owner || ""; $("bfFrom").value = S.bf.from || ""; $("bfTo").value = S.bf.to || ""; $("bfDay").value = S.bf.day ?? ""; $("bfMonth").value = S.bf.month ?? "";
     const on = Object.values(S.bf).some((v) => v !== "" && v != null);
     $("bfClear").hidden = !on;
+    /* Make an active filter impossible to miss. */
+    const bar = o.closest(".bx-filters"); if (bar) bar.classList.toggle("bf-on", on);
+    for (const id of ["bfOwner", "bfFrom", "bfTo", "bfDay", "bfMonth"]) { const x = $(id); x.closest("label")?.classList.toggle("bf-set", !!x.value); }
   }
   function renderOverview() {
     const boxes = boxData();
@@ -1311,7 +1315,7 @@
     if (el.matches("[data-dtab]")) { S.dTab = el.dataset.dtab; document.querySelectorAll("#drawerRoot .dtab").forEach((b) => b.classList.toggle("on", b === el)); document.querySelectorAll("#drawerRoot .dpane").forEach((x) => { x.hidden = x.dataset.pane !== S.dTab; }); const db = document.querySelector("#drawerRoot .db"); if (db) db.scrollTop = 0; return; }
     if (el.matches("[data-tl-all]")) { document.querySelectorAll("#drawerRoot .tl-x").forEach((x) => x.classList.remove("tl-x")); el.remove(); return; }
     if (el.matches("[data-box]")) { S.box = el.dataset.box; S.more.box = TILE_STEP; try { localStorage.setItem("pulse-box", S.box); } catch {} render(); $("bxPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
-    if (el.id === "bfClear") { S.bf = {}; try { localStorage.removeItem("pulse-bf"); } catch {} render(); return; }
+    if (el.id === "bfClear") { S.bf = {}; render(); return; }
     if (el.matches("[data-more]")) { S.more[el.dataset.more] = (S.more[el.dataset.more] || TILE_STEP) + TILE_STEP; render(); return; }
     if (el.matches("[data-less]")) { S.more[el.dataset.less] = TILE_STEP; render(); return; }
     if (el.matches("[data-csv]")) { downloadCsv(el.dataset.csv); return; }
@@ -1337,7 +1341,7 @@
     const cm = { cOwner: "owner", cStage: "stage", cSort: "sort" }[e.target.id];
     if (cm) { S.cv[cm] = e.target.value; S.more.ctable = 50; S.more.contacts = 0; saveCv(); renderContacts(); return; }
     const m = { bfOwner: "owner", bfFrom: "from", bfTo: "to", bfDay: "day", bfMonth: "month" }[e.target.id]; if (!m) return;
-    S.bf[m] = e.target.value; S.more.box = TILE_STEP; try { localStorage.setItem("pulse-bf", JSON.stringify(S.bf)); } catch {} render();
+    S.bf[m] = e.target.value; S.more.box = TILE_STEP; render();
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("modalRoot").innerHTML) $("modalRoot").innerHTML = ""; else if (S.open) closeDrawer(); } });
   document.addEventListener("change", async (e) => {
