@@ -1,0 +1,222 @@
+{
+  "sections": {
+    "main": {
+      "type": "pulse-collection",
+      "name": "Pulse Collection Page",
+      "blocks": {
+        "faq_01": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-segment",
+            "question": "What makes these the Premium Segment?",
+            "answer": "These are our most comfortable everyday chairs. All three have a light aluminium frame, dual 250 W motors, electromagnetic brakes and a 15 km range, with extras like a bigger 12Ah battery (ComfortRide), a 160° recline (Premium Comfort) or a wide 50 cm seat (TravelMate)."
+          }
+        },
+        "faq_02": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-segment",
+            "question": "How far can they go on a single charge?",
+            "answer": "All three are rated for up to 15 km per charge, at a top speed of 6 km/h. Actual range depends on the user's weight, the road surface and slopes."
+          }
+        },
+        "faq_03": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-segment",
+            "question": "How much weight can they carry?",
+            "answer": "All three Premium models support users up to 120 kg."
+          }
+        },
+        "faq_04": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-segment",
+            "question": "Which Premium model is the lightest?",
+            "answer": "The Pulse TravelMate is the lightest at 23 kg. The Pulse ComfortRide and Pulse Premium Comfort weigh 27 kg each. All weights are without the battery."
+          }
+        },
+        "faq_05": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-segment",
+            "question": "Can I take them on a flight?",
+            "answer": "All three are IATA compliant. Each airline makes its own final decision on mobility devices, so please check with your airline before you fly."
+          }
+        },
+        "faq_06": {
+          "type": "faq",
+          "settings": {
+            "collection": "lightweight-segment",
+            "question": "How much do these wheelchairs weigh?",
+            "answer": "The Pulse UltraLight and Pulse MiniLite weigh just 19 kg each, and the Pulse SlimFold weighs 25 kg. All weights are without the battery."
+          }
+        },
+        "faq_07": {
+          "type": "faq",
+          "settings": {
+            "collection": "lightweight-segment",
+            "question": "Which one is best for small homes?",
+            "answer": "The Pulse MiniLite is only 78 cm long, the most compact chair in our range. The Pulse SlimFold folds to just 38 cm wide, so it stores easily in a narrow space."
+          }
+        },
+        "faq_08": {
+          "type": "faq",
+          "settings": {
+            "collection": "lightweight-segment",
+            "question": "How far can they go on a single charge?",
+            "answer": "All three are rated for up to 15 km per charge, at a top speed of 6 km/h. The SlimFold uses twin lithium-ion batteries."
+          }
+        },
+        "faq_09": {
+          "type": "faq",
+          "settings": {
+            "collection": "lightweight-segment",
+            "question": "How much weight can they carry?",
+            "answer": "All three support users up to 120 kg."
+          }
+        },
+        "faq_10": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-lightweight-segment",
+            "question": "How do they fold?",
+            "answer": "The Pulse Everyday has a quick one-click fold. The Pulse SmartFold folds itself at the press of a button on the remote, so there is no lifting or wrestling with the frame."
+          }
+        },
+        "faq_11": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-lightweight-segment",
+            "question": "How much do they weigh?",
+            "answer": "Both weigh 22 kg without the battery, on a light aluminium frame."
+          }
+        },
+        "faq_12": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-lightweight-segment",
+            "question": "What is the range and weight capacity?",
+            "answer": "Both are rated for up to 15 km per charge at a top speed of 6 km/h, and support users up to 120 kg."
+          }
+        },
+        "faq_13": {
+          "type": "faq",
+          "settings": {
+            "collection": "premium-lightweight-segment",
+            "question": "Can I take them on a flight?",
+            "answer": "Both are IATA compliant for air travel. Each airline makes its own final decision on mobility devices, so please check with your airline before you fly."
+          }
+        },
+        "faq_14": {
+          "type": "faq",
+          "settings": {
+            "collection": "heavy-duty-segment",
+            "question": "How much weight can they carry?",
+            "answer": "All three Heavy Duty models have a sturdy steel frame and support users up to 140 kg."
+          }
+        },
+        "faq_15": {
+          "type": "faq",
+          "settings": {
+            "collection": "heavy-duty-segment",
+            "question": "How far can they go on a single charge?",
+            "answer": "All three use a large 24V 20Ah battery and are rated for up to 15 km per charge, at a top speed of 6 km/h."
+          }
+        },
+        "faq_16": {
+          "type": "faq",
+          "settings": {
+            "collection": "heavy-duty-segment",
+            "question": "Which model can recline?",
+            "answer": "The Pulse HomeCare Recliner reclines up to 160° at the touch of a remote and has a headrest, so it suits users who sit for long hours or need to rest during the day."
+          }
+        },
+        "faq_17": {
+          "type": "faq",
+          "settings": {
+            "collection": "heavy-duty-segment",
+            "question": "Can it be pushed by hand?",
+            "answer": "Yes, the Pulse DualDrive has large 23\" rear wheels, so the user or a carer can push it by hand, and its dual 250 W motors take over whenever you want powered driving."
+          }
+        },
+        "faq_18": {
+          "type": "faq",
+          "settings": {
+            "collection": "heavy-duty-segment",
+            "question": "Are they heavy to lift?",
+            "answer": "They weigh 31–39 kg without the battery, so lifting into a car usually needs two people. All three have an X-fold design for storage."
+          }
+        },
+        "faq_19": {
+          "type": "faq",
+          "settings": {
+            "collection": "",
+            "question": "What warranty do Pulse wheelchairs come with?",
+            "answer": "Every Pulse wheelchair comes with a 1-year warranty against manufacturing defects in the frame, motor and electrical parts. See our Warranty Policy page for full details."
+          }
+        },
+        "faq_20": {
+          "type": "faq",
+          "settings": {
+            "collection": "",
+            "question": "How long does delivery take?",
+            "answer": "Delivery is free across India and usually takes 3–5 business days, depending on your PIN code."
+          }
+        },
+        "faq_21": {
+          "type": "faq",
+          "settings": {
+            "collection": "",
+            "question": "Are the frames made of carbon fibre?",
+            "answer": "No. Most Pulse chairs have a light aluminium frame, and the heavy-duty models and SlimFold use a sturdy steel frame. The carbon-fibre look on some models is a hydro-dipped colour finish."
+          }
+        }
+      },
+      "block_order": [
+        "faq_01",
+        "faq_02",
+        "faq_03",
+        "faq_04",
+        "faq_05",
+        "faq_06",
+        "faq_07",
+        "faq_08",
+        "faq_09",
+        "faq_10",
+        "faq_11",
+        "faq_12",
+        "faq_13",
+        "faq_14",
+        "faq_15",
+        "faq_16",
+        "faq_17",
+        "faq_18",
+        "faq_21",
+        "faq_19",
+        "faq_20"
+      ],
+      "settings": {
+        "per_page": 12,
+        "show_switcher": true,
+        "show_help": true,
+        "help_heading": "Not sure which one is right for you?",
+        "help_text": "Talk to a Pulse mobility expert. Free advice, no pressure.",
+        "phone_number": "919071101108",
+        "phone_label": "+91 90711 01108",
+        "whatsapp_number": "919071101108",
+        "faq_heading": "Frequently asked questions"
+      }
+    },
+    "guide": {
+      "type": "pulse-collection-guide",
+      "settings": {
+        "kicker": "Buying guide"
+      }
+    }
+  },
+  "order": [
+    "main",
+    "guide"
+  ]
+}
