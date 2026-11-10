@@ -1,0 +1,33 @@
+{%- comment -%}
+  Pulse: the Diwali sale ended on 10 Nov 2026. This header section no longer colours the announcement bar.
+  It only tidies up after the sale on every page: removes the saved Diwali scratch-card state from the
+  shopper's browser and hides any leftover Diwali coupon chip in the cart. Outputs nothing visible.
+  It can be deleted from the header later (a few weeks after the sale).
+{%- endcomment -%}
+<style>.pdw-chip,.pdw-ov{display:none!important}.shopify-section:has(> .pulse-ann-diwali){display:none}</style>
+<div class="pulse-ann-diwali" hidden></div>
+<script>
+  (function () {
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && /^pulseDiwali/i.test(k)) localStorage.removeItem(k);
+      }
+      for (var j = sessionStorage.length - 1; j >= 0; j--) {
+        var s = sessionStorage.key(j);
+        if (s && /^pulseDiwali/i.test(s)) sessionStorage.removeItem(s);
+      }
+    } catch (e) {}
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Pulse Diwali clean-up",
+  "enabled_on": { "groups": ["header"] },
+  "settings": [
+    { "type": "paragraph", "content": "The Diwali sale has ended. This section only clears leftover Diwali coupon data from shoppers' browsers. Safe to remove after a few weeks." }
+  ],
+  "presets": [{ "name": "Pulse Diwali clean-up" }]
+}
+{% endschema %}
