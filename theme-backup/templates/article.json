@@ -1,0 +1,15 @@
+{
+  "sections": {
+    "main": {
+      "type": "pulse-article",
+      "settings": {
+        "help_heading": "Not sure which wheelchair is right?",
+        "help_text": "Tell a Pulse mobility expert the user's weight, home and how they'll travel. Free advice, no pressure.",
+        "phone_number": "919071101108"
+      }
+    }
+  },
+  "order": [
+    "main"
+  ]
+}

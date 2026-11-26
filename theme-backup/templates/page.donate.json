@@ -1,0 +1,17 @@
+{
+  "sections": {
+    "main": {
+      "type": "pulse-donate",
+      "settings": {
+        "picks": [
+          "pulse-ultralight-electric-wheelchair",
+          "pulse-everyday-electric-wheelchair",
+          "pulse-heavyduty-electric-wheelchair"
+        ]
+      }
+    }
+  },
+  "order": [
+    "main"
+  ]
+}

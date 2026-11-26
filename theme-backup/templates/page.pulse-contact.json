@@ -1,0 +1,23 @@
+{
+  "sections": {
+    "main": {
+      "type": "pulse-contact",
+      "settings": {}
+    },
+    "faq": {
+      "type": "pulse-faq",
+      "settings": {
+        "source": "page",
+        "eyebrow": "FAQs",
+        "heading": "Contact questions",
+        "intro": "",
+        "soft": false,
+        "show_cta": true
+      }
+    }
+  },
+  "order": [
+    "main",
+    "faq"
+  ]
+}
