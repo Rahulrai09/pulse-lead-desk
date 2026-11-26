@@ -1,0 +1,12 @@
+{{ 'overflow-list.css' | asset_url | preload_tag: as: 'style' }}
+{{ 'base.css' | asset_url | stylesheet_tag: preload: true }}
+{%- comment -%}
+  Pulse: load the Pulse brand styles and the two most-used font weights from the <head>, so pages
+  paint once with the right fonts and layout instead of re-rendering when each section loads them.
+{%- endcomment -%}
+<link rel="preload" href="{{ 'Metropolis-Regular.woff2' | asset_url }}" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{{ 'Metropolis-Bold.woff2' | asset_url }}" as="font" type="font/woff2" crossorigin>
+{{ 'pulse-custom.css' | asset_url | stylesheet_tag }}
+{{ 'pulse-premium.css' | asset_url | stylesheet_tag }}
+{{ 'pulse-cards.css' | asset_url | stylesheet_tag }}
+{%- if template.name == 'index' -%}{{ 'pulse-home.css' | asset_url | stylesheet_tag }}{%- endif -%}
