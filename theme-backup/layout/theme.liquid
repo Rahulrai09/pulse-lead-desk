@@ -46,6 +46,8 @@
 
     {{ content_for_header }}
     {{ 'pulse-drawer.css' | asset_url | stylesheet_tag }}
+    {%- comment -%} Pulse: login pop-up and button styles, product-page styles, photo framing on cards and galleries, Lead Desk login tracking. {%- endcomment -%}
+    {%- render 'pulse-logout-sync' -%}
     {%- comment -%} Faster page changes: fully prepare the next page when a shopper hovers over a link, so it opens instantly with no animation. Cart, checkout and account links are never loaded early. {%- endcomment -%}
     {%- unless request.design_mode -%}
       <script type="speculationrules">
