@@ -13,3 +13,8 @@ pulsemotion.in design. Everything in this folder is the working Pulse version.
 
 **Restore:** duplicate the live theme, upload these files to the copy, preview, publish.
 **Prevention:** never click "Update theme" in Online Store → Themes.
+
+**Also customised (28 Nov 2026):**
+- `snippets/meta-tags.liquid` (saved here): home page uses the saved SEO title/description, "Pulse Motion" title suffix and site name, default share image.
+- `sections/header.liquid` (not saved, 58 KB Horizon file): on line ~404 the hidden `<h1>{{ shop.name }}</h1>` was changed to `<p>` so the home page has one H1. Re-apply after any theme update.
+- `snippets/pulse-structured-data.liquid` is a Pulse file and survives updates.
